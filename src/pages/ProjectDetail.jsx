@@ -255,8 +255,24 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     } catch (e) {
       loaded = null
     }
-    setMapping(loaded || { doorCodeCol: '', locationCol: '', items: {} })
+    if (loaded && !loaded.doorCodeCols && loaded.doorCodeCol !== undefined) {
+      // توافق مع مطابقة قديمة كانت تعتمد عمود واحد فقط لكود الباب
+      loaded = {
+        ...loaded,
+        doorCodeCols: loaded.doorCodeCol !== '' ? [loaded.doorCodeCol] : [],
+        doorCodeSeparator: '-',
+      }
+    }
+    setMapping(loaded || { doorCodeCols: [], doorCodeSeparator: '-', locationCol: '', items: {} })
   }, [storageKey])
+
+  function addDoorCodeCol(colIdx) {
+    if (colIdx === '') return
+    setMapping((m) => (m.doorCodeCols.includes(colIdx) ? m : { ...m, doorCodeCols: [...m.doorCodeCols, colIdx] }))
+  }
+  function removeDoorCodeCol(colIdx) {
+    setMapping((m) => ({ ...m, doorCodeCols: m.doorCodeCols.filter((c) => c !== colIdx) }))
+  }
 
   function updateItemMap(itemTypeId, patch) {
     setMapping((m) => ({ ...m, items: { ...m.items, [itemTypeId]: { ...(m.items[itemTypeId] || {}), ...patch } } }))
@@ -269,13 +285,25 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     setTimeout(() => setSavedMsg(''), 5000)
   }
 
+  function buildDoorCode(row, mapping) {
+    const parts = mapping.doorCodeCols
+      .map((colIdx) => {
+        const v = row[colIdx]
+        return v !== undefined && v !== null ? String(v).trim() : ''
+      })
+      .filter((p) => p !== '')
+    return parts.join(mapping.doorCodeSeparator || '-')
+  }
+
   function buildPreview() {
     onError('')
-    if (!mapping || mapping.doorCodeCol === '') { onError('حدد عمود كود الباب أولًا'); return }
+    if (!mapping || !mapping.doorCodeCols || mapping.doorCodeCols.length === 0) {
+      onError('حدد عمود واحد على الأقل لتكوين كود الباب')
+      return
+    }
     const doorMap = new Map()
     dataRows.forEach((row) => {
-      const codeRaw = row[mapping.doorCodeCol]
-      const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : ''
+      const code = buildDoorCode(row, mapping)
       if (!code) return
       const locRaw = mapping.locationCol !== '' ? row[mapping.locationCol] : ''
       const location = locRaw !== undefined && locRaw !== null ? String(locRaw).trim() : ''
@@ -394,21 +422,50 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
             </table>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="field">
-              <label>أي عمود هو كود/رقم الباب؟ *</label>
-              <select value={mapping.doorCodeCol} onChange={(e) => setMapping((m) => ({ ...m, doorCodeCol: e.target.value }))}>
-                <option value="">اختر...</option>
-                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+          <div className="field">
+            <label>كود الباب يتكوّن من أي أعمدة؟ (بالترتيب) *</label>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: -4, marginBottom: 8 }}>
+              مثال: رقم أمر الشغل - اسم المبنى - الدور - رقم الباب. اختر الأعمدة بنفس ترتيبها هنا.
+            </p>
+            {mapping.doorCodeCols.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {mapping.doorCodeCols.map((colIdx, i) => (
+                  <span key={i} className="badge badge-pending">
+                    {i + 1}. {headers[colIdx]?.label || colIdx}
+                    <button
+                      type="button" onClick={() => removeDoorCodeCol(colIdx)}
+                      style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', font: 'inherit' }}
+                    >✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select style={{ flex: 1 }} value="" onChange={(e) => addDoorCodeCol(e.target.value)}>
+                <option value="">+ أضف عمودًا لكود الباب...</option>
+                {headers.filter((h) => !mapping.doorCodeCols.includes(h.idx)).map((h) => (
+                  <option key={h.idx} value={h.idx}>{h.label}</option>
+                ))}
               </select>
+              <input
+                style={{ width: 70 }} value={mapping.doorCodeSeparator}
+                onChange={(e) => setMapping((m) => ({ ...m, doorCodeSeparator: e.target.value }))}
+                title="الفاصل بين الأجزاء"
+              />
             </div>
-            <div className="field">
-              <label>أي عمود هو الموقع/الدور؟ (اختياري)</label>
-              <select value={mapping.locationCol} onChange={(e) => setMapping((m) => ({ ...m, locationCol: e.target.value }))}>
-                <option value="">بدون</option>
-                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-              </select>
-            </div>
+            {mapping.doorCodeCols.length > 0 && dataRows[0] && (
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>
+                مثال على النتيجة: <span className="code-cell">{buildDoorCode(dataRows[0], mapping) || '—'}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="field">
+            <label>أي عمود هو الموقع/الدور؟ (اختياري)</label>
+            <select value={mapping.locationCol} onChange={(e) => setMapping((m) => ({ ...m, locationCol: e.target.value }))}>
+              <option value="">بدون</option>
+              {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+            </select>
           </div>
 
           <label>مطابقة بنود التركيب (لكل نوع، حدد من أين تُقرأ كميته)</label>
