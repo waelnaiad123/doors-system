@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import ComingSoon from './pages/ComingSoon'
+import TechnicianDaily from './pages/TechnicianDaily'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -85,7 +86,7 @@ export default function App() {
             />
             <Route
               path="technician"
-              element={<RequireRole roles={['admin', 'technician']}><ComingSoon title="تسجيل تركيب" /></RequireRole>}
+              element={<RequireRole roles={['admin', 'technician']}><TechnicianDaily /></RequireRole>}
             />
             <Route
               path="approval"
