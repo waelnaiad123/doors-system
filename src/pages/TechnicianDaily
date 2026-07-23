@@ -1,0 +1,32 @@
+-- شغّل هذا الملف في Supabase SQL Editor (إضافة فوق القاعدة الموجودة، لا يمسح أي بيانات)
+
+-- 1) عرض البنود التي لم يتم تسجيل تركيبها بعد (أو رُفض تسجيلها سابقًا)
+--    يحترم تلقائيًا صلاحيات كل مستخدم لأنه security_invoker = true
+create view public.v_pending_door_items
+with (security_invoker = true) as
+select
+  di.id as door_item_id,
+  di.door_id,
+  d.door_code,
+  d.location,
+  d.project_id,
+  p.project_name,
+  p.project_number,
+  it.name as item_type,
+  di.quantity
+from public.door_items di
+join public.doors d on d.id = di.door_id
+join public.projects p on p.id = d.project_id
+join public.item_types it on it.id = di.item_type_id
+where not exists (
+  select 1 from public.installation_records ir
+  where ir.door_item_id = di.id and ir.status <> 'rejected'
+);
+
+-- 2) السماح للفني بالتراجع عن تسجيل خاطئ طالما لسه بانتظار اعتماد المشرف
+--    (الأدمن يقدر يحذف في أي وقت)
+create policy "technician deletes own pending entries" on public.installation_records for delete
+  using (
+    public.is_admin()
+    or (technician_id = auth.uid() and status = 'pending_review')
+  );
