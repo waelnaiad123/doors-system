@@ -1,0 +1,173 @@
+/* ==========================================================================
+   نظام تصميم بسيط ومقصود لأداة تشغيل ميدانية (وليس موقع تسويقي):
+   الأولوية للوضوح، التباين العالي، سرعة القراءة على الموبايل/التابلت في الموقع،
+   ودعم كامل للعربية RTL. عنصر التمييز: حلقات التقدم الدائرية لنسب التركيب.
+   ========================================================================== */
+
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #16202b;
+  --muted: #5b6b7c;
+  --border: #e2e8f0;
+
+  --nav-bg: #0f1b2a;
+  --nav-ink: #d7e0ea;
+  --nav-ink-active: #ffffff;
+
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-soft: #eaf1ff;
+
+  --ok: #15803d;
+  --ok-soft: #e8f5ec;
+  --pending: #b45309;
+  --pending-soft: #fdf1e2;
+  --danger: #b91c1c;
+  --danger-soft: #fbe9e9;
+  --empty: #94a3b8;
+  --empty-soft: #eef1f5;
+
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(15, 27, 42, 0.06), 0 1px 8px rgba(15, 27, 42, 0.04);
+
+  font-family: "IBM Plex Sans Arabic", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+code, .mono, .code-cell { font-family: "IBM Plex Mono", monospace; }
+
+h1, h2, h3 { margin: 0 0 4px; font-weight: 700; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 15px; color: var(--muted); font-weight: 600; }
+
+.app-shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--nav-bg);
+  color: var(--nav-ink);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar .brand { color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 18px; padding: 0 8px; }
+.sidebar .brand small { display: block; color: var(--nav-ink); font-weight: 400; font-size: 12px; margin-top: 2px; }
+.sidebar a {
+  color: var(--nav-ink);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.sidebar a:hover { background: rgba(255,255,255,0.06); }
+.sidebar a.active { background: var(--primary); color: #fff; }
+.sidebar .user-box { margin-top: auto; padding: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px; }
+.sidebar .user-box button { margin-top: 8px; }
+
+.main { flex: 1; padding: 22px 26px; max-width: 1200px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+label { font-size: 13px; color: var(--muted); font-weight: 600; display: block; margin-bottom: 4px; }
+.field { margin-bottom: 12px; }
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary { background: #fff; border-color: var(--border); color: var(--ink); }
+.btn-secondary:hover { background: var(--bg); }
+.btn-danger { background: var(--danger-soft); color: var(--danger); }
+.btn-ok { background: var(--ok-soft); color: var(--ok); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.sm { padding: 5px 10px; font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; position: sticky; top: 0; background: var(--surface); }
+tr:hover td { background: var(--bg); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 100px; font-size: 12px; font-weight: 600;
+}
+.badge-ok { background: var(--ok-soft); color: var(--ok); }
+.badge-pending { background: var(--pending-soft); color: var(--pending); }
+.badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-empty { background: var(--empty-soft); color: var(--empty); }
+
+.progress-ring { display: inline-flex; align-items: center; gap: 10px; }
+.progress-ring .pct { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 13px; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-state .icon { font-size: 28px; margin-bottom: 8px; }
+
+.alert { padding: 10px 14px; border-radius: 8px; font-size: 13.5px; margin-bottom: 14px; }
+.alert-error { background: var(--danger-soft); color: var(--danger); }
+.alert-ok { background: var(--ok-soft); color: var(--ok); }
+
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--nav-bg);
+}
+.login-card {
+  background: #fff; border-radius: 14px; padding: 32px; width: 100%; max-width: 380px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+
+@media (max-width: 780px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; }
+  .sidebar .brand, .sidebar .user-box { display: none; }
+  .main { padding: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
