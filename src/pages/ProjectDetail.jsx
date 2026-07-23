@@ -170,16 +170,18 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
 }
 
 // ---------------------------------------------------------------------------
+// استيراد ذكي: يقبل ملف الإكسل الحقيقي كما هو (مهما كان شكله معقدًا)،
+// ويترك المستخدم يحدد يدويًا أي عمود يمثل كود الباب، وأي أعمدة تمثل كل بند.
+// المطابقة يمكن حفظها محليًا (localStorage) وإعادة استخدامها تلقائيًا لملفات
+// أخرى بنفس رؤوس الأعمدة (مفيد جدًا مع مئات الملفات المتشابهة الشكل).
 function ImportFile({ projectId, itemTypes, onSaved, onError }) {
+  const [rawSheet, setRawSheet] = useState(null)
+  const [headerRowNum, setHeaderRowNum] = useState(1)
+  const [mapping, setMapping] = useState(null)
   const [preview, setPreview] = useState(null)
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState('')
-
-  const typeByName = useMemo(() => {
-    const m = new Map()
-    itemTypes.forEach((t) => m.set(t.name.trim().toLowerCase(), t))
-    return m
-  }, [itemTypes])
+  const [savedMsg, setSavedMsg] = useState('')
 
   function downloadTemplate() {
     const wsData = [
@@ -202,39 +204,107 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     const file = e.target.files[0]
     if (!file) return
     onError('')
+    setPreview(null)
     const reader = new FileReader()
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target.result, { type: 'array' })
       const sheet = wb.Sheets[wb.SheetNames[0]]
-      const json = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-      const rows = json
-        .map((r) => ({
-          door_code: String(r.door_code ?? r['كود الباب'] ?? '').trim(),
-          location: String(r.location ?? r['الموقع'] ?? '').trim(),
-          item_type: String(r.item_type ?? r['البند'] ?? '').trim(),
-          quantity: Number(r.quantity ?? r['الكمية'] ?? 1) || 1,
-        }))
-        .filter((r) => r.door_code && r.item_type)
-      buildPreview(rows)
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+      setRawSheet(rows)
+
+      // نخمّن صف العناوين تلقائيًا: الصف اللي فيه أكبر عدد خلايا مكتوبة من أول 6 صفوف
+      // (الرؤوس المدمجة زي "General Data" بتملأ خلية واحدة بس، بعكس صف العناوين التفصيلي)
+      let bestRow = 0
+      let bestCount = -1
+      for (let r = 0; r < Math.min(6, rows.length); r++) {
+        const count = (rows[r] || []).filter((c) => c !== undefined && c !== null && String(c).trim() !== '').length
+        if (count > bestCount) { bestCount = count; bestRow = r }
+      }
+      setHeaderRowNum(bestRow + 1)
     }
     reader.readAsArrayBuffer(file)
-    e.target.value = '' // يسمح برفع نفس الملف مرة أخرى إذا لزم
+    e.target.value = ''
   }
 
-  function buildPreview(rows) {
-    const unmatched = new Set()
+  const headers = useMemo(() => {
+    if (!rawSheet || !rawSheet[headerRowNum - 1]) return []
+    return rawSheet[headerRowNum - 1].map((h, idx) => ({
+      idx,
+      label: h !== undefined && h !== null && String(h).trim() !== '' ? String(h).trim() : `عمود ${idx + 1}`,
+    }))
+  }, [rawSheet, headerRowNum])
+
+  const dataRows = useMemo(() => {
+    if (!rawSheet) return []
+    return rawSheet
+      .slice(headerRowNum)
+      .filter((r) => (r || []).some((c) => c !== undefined && c !== null && String(c).trim() !== ''))
+  }, [rawSheet, headerRowNum])
+
+  const storageKey = useMemo(() => {
+    if (headers.length === 0) return null
+    return 'doors-import-map:' + headers.map((h) => h.label).join('|')
+  }, [headers])
+
+  useEffect(() => {
+    if (!storageKey) return
+    let loaded = null
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) loaded = JSON.parse(saved)
+    } catch (e) {
+      loaded = null
+    }
+    setMapping(loaded || { doorCodeCol: '', locationCol: '', items: {} })
+  }, [storageKey])
+
+  function updateItemMap(itemTypeId, patch) {
+    setMapping((m) => ({ ...m, items: { ...m.items, [itemTypeId]: { ...(m.items[itemTypeId] || {}), ...patch } } }))
+  }
+
+  function saveMappingTemplate() {
+    if (!storageKey || !mapping) return
+    localStorage.setItem(storageKey, JSON.stringify(mapping))
+    setSavedMsg('تم الحفظ. المرة الجاية اللي ترفع فيها ملف بنفس أسماء الأعمدة، هتتحمّل نفس المطابقة تلقائيًا.')
+    setTimeout(() => setSavedMsg(''), 5000)
+  }
+
+  function buildPreview() {
+    onError('')
+    if (!mapping || mapping.doorCodeCol === '') { onError('حدد عمود كود الباب أولًا'); return }
     const doorMap = new Map()
-    rows.forEach((r) => {
-      const t = typeByName.get(r.item_type.trim().toLowerCase())
-      if (!t) unmatched.add(r.item_type)
-      if (!doorMap.has(r.door_code)) doorMap.set(r.door_code, { door_code: r.door_code, location: r.location, items: [] })
-      doorMap.get(r.door_code).items.push({ item_type: r.item_type, item_type_id: t?.id, quantity: r.quantity })
+    dataRows.forEach((row) => {
+      const codeRaw = row[mapping.doorCodeCol]
+      const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : ''
+      if (!code) return
+      const locRaw = mapping.locationCol !== '' ? row[mapping.locationCol] : ''
+      const location = locRaw !== undefined && locRaw !== null ? String(locRaw).trim() : ''
+      if (!doorMap.has(code)) doorMap.set(code, { door_code: code, location, items: [] })
+      const doorEntry = doorMap.get(code)
+
+      itemTypes.forEach((t) => {
+        const im = mapping.items[t.id]
+        if (!im || !im.mode || im.mode === 'none') return
+        let qty = 0
+        if (im.mode === 'always1') {
+          qty = 1
+        } else if (im.mode === 'column' && im.col !== '' && im.col !== undefined) {
+          const raw = row[im.col]
+          if (typeof raw === 'number') {
+            if (raw > 0) qty = raw
+          } else if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+            const num = parseFloat(raw)
+            qty = !isNaN(num) && num > 0 ? num : 1
+          }
+        }
+        if (qty > 0) doorEntry.items.push({ item_type_id: t.id, quantity: qty })
+      })
     })
+    const doorsArr = Array.from(doorMap.values())
     setPreview({
-      doors: Array.from(doorMap.values()),
-      unmatchedTypes: Array.from(unmatched),
-      doorCount: doorMap.size,
-      itemCount: rows.length,
+      doors: doorsArr,
+      doorCount: doorsArr.length,
+      itemCount: doorsArr.reduce((s, d) => s + d.items.length, 0),
     })
   }
 
@@ -271,6 +341,8 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       await upsertInChunks('door_items', itemRows, 'door_id,item_type_id')
 
       onSaved(`تم استيراد ${preview.doorCount} باب بإجمالي ${itemRows.length} بند بنجاح.`)
+      setRawSheet(null)
+      setMapping(null)
       setPreview(null)
     } catch (err) {
       onError(err.message)
@@ -282,25 +354,97 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   return (
     <div className="card">
-      <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>
-        الملف يجب أن يحتوي أعمدة: <code>door_code</code> (كود الباب) · <code>location</code> (اختياري) ·{' '}
-        <code>item_type</code> (اسم البند كما هو مسجل بالنظام) · <code>quantity</code> (اختياري، افتراضي 1).
-        كرر نفس كود الباب في أكثر من سطر لإضافة أكثر من بند لنفس الباب.
-      </p>
-      <div className="toolbar">
-        <button type="button" className="btn-secondary" onClick={downloadTemplate}>⬇ تحميل نموذج الاستيراد</button>
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} />
-      </div>
+      {!rawSheet && (
+        <>
+          <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>
+            ارفع ملف الإكسل بتاعك <strong>كما هو تمامًا</strong>، حتى لو شكله معقد وفيه أعمدة كتيرة. في الخطوة
+            الجاية هتحدد إنت أنهي عمود هو كود الباب، وأنهي أعمدة تمثل كل بند (حلق، ضلفة، كالون، مفصلات...).
+            لو معندكش ملف جاهز، فيه نموذج بسيط تقدر تنزّله وتبدأ بيه.
+          </p>
+          <div className="toolbar">
+            <button type="button" className="btn-secondary" onClick={downloadTemplate}>⬇ تحميل نموذج بسيط</button>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} />
+          </div>
+        </>
+      )}
+
+      {rawSheet && !preview && mapping && (
+        <div>
+          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>رقم صف عناوين الأعمدة في ملفك (كما تراه في إكسل)</label>
+              <input
+                type="number" min={1} style={{ width: 90 }} value={headerRowNum}
+                onChange={(e) => setHeaderRowNum(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
+            <button type="button" className="btn-secondary sm" onClick={() => { setRawSheet(null); setMapping(null) }}>
+              ملف آخر
+            </button>
+          </div>
+
+          <div style={{ overflow: 'auto', maxHeight: 130, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14 }}>
+            <table>
+              <thead><tr>{headers.map((h) => <th key={h.idx}>{h.label}</th>)}</tr></thead>
+              <tbody>
+                {dataRows.slice(0, 2).map((r, i) => (
+                  <tr key={i}>{headers.map((h) => <td key={h.idx}>{String(r[h.idx] ?? '')}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="field">
+              <label>أي عمود هو كود/رقم الباب؟ *</label>
+              <select value={mapping.doorCodeCol} onChange={(e) => setMapping((m) => ({ ...m, doorCodeCol: e.target.value }))}>
+                <option value="">اختر...</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>أي عمود هو الموقع/الدور؟ (اختياري)</label>
+              <select value={mapping.locationCol} onChange={(e) => setMapping((m) => ({ ...m, locationCol: e.target.value }))}>
+                <option value="">بدون</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <label>مطابقة بنود التركيب (لكل نوع، حدد من أين تُقرأ كميته)</label>
+          {itemTypes.map((t) => {
+            const im = mapping.items[t.id] || {}
+            return (
+              <div key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ width: 90, fontSize: 13.5, flexShrink: 0 }}>{t.name}</span>
+                <select style={{ flex: 1 }} value={im.mode || 'none'} onChange={(e) => updateItemMap(t.id, { mode: e.target.value })}>
+                  <option value="none">غير موجود في الملف</option>
+                  <option value="always1">دائمًا موجود (كمية 1) لكل صف/باب</option>
+                  <option value="column">من عمود في الملف...</option>
+                </select>
+                {im.mode === 'column' && (
+                  <select style={{ flex: 1 }} value={im.col ?? ''} onChange={(e) => updateItemMap(t.id, { col: e.target.value })}>
+                    <option value="">اختر العمود...</option>
+                    {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+                  </select>
+                )}
+              </div>
+            )
+          })}
+
+          {savedMsg && <div className="alert alert-ok" style={{ marginTop: 10 }}>{savedMsg}</div>}
+          <div className="toolbar" style={{ marginTop: 14 }}>
+            <button type="button" className="btn-secondary" onClick={saveMappingTemplate}>💾 احفظ هذه المطابقة لملفات مشابهة لاحقًا</button>
+            <button type="button" className="btn-primary" onClick={buildPreview}>معاينة قبل الاستيراد ←</button>
+          </div>
+        </div>
+      )}
 
       {preview && (
-        <div style={{ marginTop: 12 }}>
-          <div className="alert alert-ok">تم قراءة الملف: {preview.doorCount} باب، {preview.itemCount} بند.</div>
-          {preview.unmatchedTypes.length > 0 && (
-            <div className="alert alert-error">
-              الأنواع التالية غير موجودة بالنظام ولن تُستورد حتى تصحيحها في الملف أو إضافتها بمعرفة الأدمن:{' '}
-              {preview.unmatchedTypes.join('، ')}
-            </div>
-          )}
+        <div>
+          <div className="alert alert-ok">
+            تم تجهيز {preview.doorCount} باب بإجمالي {preview.itemCount} بند. راجع العينة قبل التأكيد.
+          </div>
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
             <table>
               <thead><tr><th>كود الباب</th><th>الموقع</th><th>عدد البنود</th></tr></thead>
@@ -314,9 +458,12 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           {preview.doors.length > 50 && (
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>...وعدد {preview.doors.length - 50} باب آخر</p>
           )}
-          <button className="btn-primary" style={{ marginTop: 12 }} disabled={importing} onClick={handleImport}>
-            {importing ? (progress || 'جارِ الاستيراد...') : `تأكيد الاستيراد (${preview.doorCount} باب)`}
-          </button>
+          <div className="toolbar" style={{ marginTop: 12 }}>
+            <button type="button" className="btn-secondary" onClick={() => setPreview(null)}>← رجوع لتعديل المطابقة</button>
+            <button className="btn-primary" disabled={importing} onClick={handleImport}>
+              {importing ? (progress || 'جارِ الاستيراد...') : `تأكيد الاستيراد (${preview.doorCount} باب)`}
+            </button>
+          </div>
         </div>
       )}
     </div>
