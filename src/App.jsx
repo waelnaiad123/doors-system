@@ -7,6 +7,7 @@ import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import ComingSoon from './pages/ComingSoon'
 import TechnicianDaily from './pages/TechnicianDaily'
+import ApprovalScreen from './pages/ApprovalScreen'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -90,7 +91,7 @@ export default function App() {
             />
             <Route
               path="approval"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ComingSoon title="اعتماد الإدخالات" /></RequireRole>}
+              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ApprovalScreen /></RequireRole>}
             />
             <Route
               path="delivery"
