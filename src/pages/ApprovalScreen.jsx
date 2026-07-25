@@ -5,11 +5,11 @@ import ProgressRing from '../components/ProgressRing'
 
 export default function ApprovalScreen() {
   const { profile } = useAuth()
-  const [projects, setProjects] = useState([])
+  const [projectsPending, setProjectsPending] = useState([])
   const [projectId, setProjectId] = useState('')
   const [records, setRecords] = useState([])
   const [selected, setSelected] = useState(new Set())
-  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [loadingOverview, setLoadingOverview] = useState(true)
   const [loadingRecords, setLoadingRecords] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -17,15 +17,34 @@ export default function ApprovalScreen() {
   const [summaryView, setSummaryView] = useState('item')
   const [showSummary, setShowSummary] = useState(true)
 
-  useEffect(() => { loadProjects() }, []) // eslint-disable-line
+  function canApprove(rec) {
+    if (profile.role === 'admin' || profile.role === 'engineer') return true
+    if (profile.role === 'supervisor') return rec.technician_role !== 'supervisor'
+    return false
+  }
+
+  useEffect(() => { loadOverview() }, []) // eslint-disable-line
   useEffect(() => { if (projectId) loadRecords() }, [projectId]) // eslint-disable-line
 
-  async function loadProjects() {
-    setLoadingProjects(true)
-    const { data, error } = await supabase.from('projects').select('id, project_name, project_number').order('project_name')
-    if (error) setError(error.message)
-    setProjects(data || [])
-    setLoadingProjects(false)
+  async function loadOverview() {
+    setLoadingOverview(true)
+    setError('')
+    const { data, error } = await supabase
+      .from('v_installations_detail')
+      .select('project_id, project_number, project_name, technician_role, status')
+      .eq('status', 'pending_review')
+    if (error) { setError(error.message); setLoadingOverview(false); return }
+    const eligible = (data || []).filter(canApprove)
+    const m = new Map()
+    eligible.forEach((r) => {
+      if (!m.has(r.project_id)) m.set(r.project_id, { project_id: r.project_id, project_number: r.project_number, project_name: r.project_name, count: 0 })
+      m.get(r.project_id).count++
+    })
+    const list = Array.from(m.values()).sort((a, b) => b.count - a.count)
+    setProjectsPending(list)
+    // لو المشروع المفتوح حاليًا ما بقاش محتاج اعتماد (خلصنا كل حاجة فيه)، اقفله
+    if (projectId && !list.some((p) => p.project_id === projectId)) setProjectId('')
+    setLoadingOverview(false)
   }
 
   async function loadRecords() {
@@ -41,12 +60,6 @@ export default function ApprovalScreen() {
     setRecords(data || [])
     setSelected(new Set())
     setLoadingRecords(false)
-  }
-
-  function canApprove(rec) {
-    if (profile.role === 'admin' || profile.role === 'engineer') return true
-    if (profile.role === 'supervisor') return rec.technician_role !== 'supervisor'
-    return false
   }
 
   const pending = useMemo(() => records.filter((r) => r.status === 'pending_review'), [records])
@@ -109,7 +122,7 @@ export default function ApprovalScreen() {
         .in('id', ids)
       if (error) throw error
       setNotice(`تم اعتماد ${ids.length} بند بنجاح.`)
-      await loadRecords()
+      await Promise.all([loadRecords(), loadOverview()])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -127,7 +140,7 @@ export default function ApprovalScreen() {
       .eq('id', id)
     setBusy(false)
     if (error) { setError(error.message); return }
-    await loadRecords()
+    await Promise.all([loadRecords(), loadOverview()])
   }
 
   return (
@@ -137,17 +150,32 @@ export default function ApprovalScreen() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
-      <div className="card">
-        <div className="field">
-          <label>اختر المشروع</label>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
-            <option value="">{loadingProjects ? 'جارِ التحميل...' : '-- اختر مشروعًا --'}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-            ))}
-          </select>
+      {!loadingOverview && projectsPending.length === 0 && (
+        <div className="card empty-state">
+          <div className="icon">✅</div>
+          مفيش أي بند بانتظار اعتمادك حاليًا في أي مشروع. كل حاجة تمام!
         </div>
-      </div>
+      )}
+
+      {(loadingOverview || projectsPending.length > 0) && (
+        <div className="card">
+          <div className="field">
+            <label>
+              {loadingOverview
+                ? 'جارِ التحميل...'
+                : `اختر المشروع (${projectsPending.length} مشروع بانتظار اعتمادك)`}
+            </label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
+              <option value="">-- اختر مشروعًا --</option>
+              {projectsPending.map((p) => (
+                <option key={p.project_id} value={p.project_id}>
+                  {p.project_number} — {p.project_name} ({p.count} بند)
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {projectId && !loadingRecords && (
         <div className="card">
