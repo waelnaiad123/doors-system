@@ -4,6 +4,18 @@ import { ROLES, ROLE_LIST } from '../lib/roles'
 
 const EMPTY_FORM = { email: '', password: '', full_name: '', role: 'technician', can_create_projects: false }
 
+async function extractFunctionError(error, data) {
+  if (data?.error) return data.error
+  if (error?.context) {
+    try {
+      const body = await error.context.json()
+      if (body?.error) return body.error
+    } catch { /* تعذّر قراءة تفاصيل الخطأ، سيتم استخدام الرسالة العامة */ }
+  }
+  return error?.message || 'حدث خطأ غير متوقع'
+}
+
+
 export default function UsersScreen() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -42,8 +54,7 @@ export default function UsersScreen() {
           can_create_projects: form.can_create_projects,
         },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error || data?.error) throw new Error(await extractFunctionError(error, data))
       setNotice(`تم إنشاء حساب "${form.full_name}" بنجاح.`)
       setForm(EMPTY_FORM); setShowForm(false)
       await loadUsers()
@@ -64,8 +75,7 @@ export default function UsersScreen() {
       const { data, error } = await supabase.functions.invoke('admin-users', {
         body: { action: 'reset_password', user_id: user.id, new_password: newPass },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error || data?.error) throw new Error(await extractFunctionError(error, data))
       setNotice(`تم تغيير كلمة السر لـ "${user.full_name}" بنجاح.`)
     } catch (err) {
       setError(err.message)
