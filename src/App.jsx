@@ -10,6 +10,7 @@ import TechnicianDaily from './pages/TechnicianDaily'
 import ApprovalScreen from './pages/ApprovalScreen'
 import ProjectAssignments from './pages/ProjectAssignments'
 import DeliveryScreen from './pages/DeliveryScreen'
+import UsersScreen from './pages/UsersScreen'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -85,7 +86,7 @@ export default function App() {
             />
             <Route
               path="users"
-              element={<RequireRole roles={['admin']}><ComingSoon title="المستخدمون" /></RequireRole>}
+              element={<RequireRole roles={['admin']}><UsersScreen /></RequireRole>}
             />
             <Route
               path="technician"
