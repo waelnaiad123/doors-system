@@ -23,7 +23,7 @@ export default function ProjectDetail() {
       supabase.from('item_types').select('*').order('name'),
       supabase
         .from('doors')
-        .select('id, door_code, location, door_items(id, item_type_id, quantity, item_types(name))')
+        .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, item_types(name))')
         .eq('project_id', projectId)
         .order('door_code'),
     ])
@@ -86,17 +86,24 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'list' && <DoorsList doors={doors} />}
+      {tab === 'list' && <DoorsList doors={doors} onReload={loadAll} onError={setError} />}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
+const VENT_ITEM_NAMES = ['حلق هواية', 'ريش هواية']
+
 function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
   const [doorCode, setDoorCode] = useState('')
   const [location, setLocation] = useState('')
+  const [doorType, setDoorType] = useState('door')
   const [rows, setRows] = useState([{ item_type_id: '', quantity: 1 }])
   const [saving, setSaving] = useState(false)
+
+  const availableItemTypes = doorType === 'vent_window'
+    ? itemTypes.filter((t) => VENT_ITEM_NAMES.includes(t.name))
+    : itemTypes.filter((t) => !VENT_ITEM_NAMES.includes(t.name))
 
   function addRow() { setRows([...rows, { item_type_id: '', quantity: 1 }]) }
   function updateRow(i, patch) { setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r))) }
@@ -113,7 +120,7 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
     setSaving(true)
     const { data: door, error: doorErr } = await supabase
       .from('doors')
-      .upsert({ project_id: projectId, door_code: code, location: location.trim() || null }, { onConflict: 'project_id,door_code' })
+      .upsert({ project_id: projectId, door_code: code, location: location.trim() || null, door_type: doorType }, { onConflict: 'project_id,door_code' })
       .select()
       .single()
 
@@ -128,7 +135,7 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
     if (itemsErr) { onError(itemsErr.message); return }
 
     onSaved(`تم حفظ الباب "${code}" بعدد ${validRows.length} بند.`)
-    setDoorCode(''); setLocation(''); setRows([{ item_type_id: '', quantity: 1 }])
+    setDoorCode(''); setLocation(''); setDoorType('door'); setRows([{ item_type_id: '', quantity: 1 }])
   }
 
   return (
@@ -136,6 +143,13 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
       {doorCode.trim() && existingCodes.has(doorCode.trim()) && (
         <div className="alert alert-ok">هذا الكود موجود بالفعل — سيتم إضافة/تحديث البنود على نفس الباب.</div>
       )}
+      <div className="field">
+        <label>نوع البند</label>
+        <div className="toolbar">
+          <button type="button" className={doorType === 'door' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setDoorType('door')}>باب</button>
+          <button type="button" className={doorType === 'vent_window' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setDoorType('vent_window')}>هواية / شباك</button>
+        </div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div className="field">
           <label>كود الباب *</label>
@@ -147,12 +161,12 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
         </div>
       </div>
 
-      <label>بنود الباب (حلق، ضلفة، وكل إكسسوار)</label>
+      <label>{doorType === 'vent_window' ? 'بنود الهواية/الشباك' : 'بنود الباب (حلق، ضلفة، وكل إكسسوار)'}</label>
       {rows.map((r, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <select style={{ flex: 2 }} value={r.item_type_id} onChange={(e) => updateRow(i, { item_type_id: e.target.value })}>
             <option value="">اختر البند...</option>
-            {itemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {availableItemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
           <input type="number" min={1} style={{ width: 80 }} value={r.quantity}
             onChange={(e) => updateRow(i, { quantity: e.target.value })} />
@@ -528,18 +542,36 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 }
 
 // ---------------------------------------------------------------------------
-function DoorsList({ doors }) {
+function DoorsList({ doors, onReload, onError }) {
+  const [busyId, setBusyId] = useState('')
+
+  async function toggleType(door) {
+    const nextType = door.door_type === 'vent_window' ? 'door' : 'vent_window'
+    const label = nextType === 'vent_window' ? 'هواية/شباك' : 'باب عادي'
+    if (!window.confirm(`تحويل "${door.door_code}" إلى ${label}؟`)) return
+    setBusyId(door.id)
+    const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
+    setBusyId('')
+    if (error) { onError(error.message); return }
+    onReload()
+  }
+
   if (doors.length === 0) {
     return <div className="empty-state"><div className="icon">🚪</div>لا توجد أبواب مُضافة بعد.</div>
   }
   return (
     <div className="card">
       <table>
-        <thead><tr><th>كود الباب</th><th>الموقع</th><th>البنود</th></tr></thead>
+        <thead><tr><th>كود الباب</th><th>النوع</th><th>الموقع</th><th>البنود</th><th></th></tr></thead>
         <tbody>
           {doors.map((d) => (
             <tr key={d.id}>
               <td className="code-cell">{d.door_code}</td>
+              <td>
+                <span className={d.door_type === 'vent_window' ? 'badge badge-pending' : 'badge badge-empty'}>
+                  {d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}
+                </span>
+              </td>
               <td>{d.location || '—'}</td>
               <td>
                 {(d.door_items || []).map((it) => (
@@ -547,6 +579,11 @@ function DoorsList({ doors }) {
                     {it.item_types?.name} × {it.quantity}
                   </span>
                 ))}
+              </td>
+              <td>
+                <button className="btn-secondary sm" disabled={busyId === d.id} onClick={() => toggleType(d)}>
+                  {d.door_type === 'vent_window' ? 'تحويل لباب' : 'تحويل لهواية/شباك'}
+                </button>
               </td>
             </tr>
           ))}
