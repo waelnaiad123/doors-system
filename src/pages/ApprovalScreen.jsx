@@ -97,6 +97,8 @@ export default function ApprovalScreen() {
   const totalApproved = records.filter((r) => r.status === 'approved').length
   const totalAll = records.length
   const overallPct = totalAll > 0 ? Math.round((100 * totalApproved) / totalAll) : 0
+  const totalPoints = records.reduce((s, r) => s + (Number(r.points_earned) || 0), 0)
+  const approvedPoints = records.filter((r) => r.status === 'approved').reduce((s, r) => s + (Number(r.points_earned) || 0), 0)
 
   function toggle(id) {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -192,6 +194,7 @@ export default function ApprovalScreen() {
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{totalApproved} من {totalAll} بند معتمد</div>
                   <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{pending.length} بند بانتظار الاعتماد</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>النقاط: {approvedPoints} معتمدة من {totalPoints} إجمالي</div>
                 </div>
               </div>
               <div className="toolbar">
@@ -275,6 +278,7 @@ export default function ApprovalScreen() {
                               <span title="يحتاج اعتماد مهندس" style={{ flexShrink: 0 }}>🔒</span>
                             )}
                             <span style={{ flex: 1, fontSize: 14 }}>{r.item_type} × {r.quantity}</span>
+                            <span className="badge badge-empty" style={{ fontSize: 11 }}>{r.points_earned} نقطة</span>
                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.technician_name}</span>
                             {eligible && (
                               <>
