@@ -198,13 +198,20 @@ export default function TechnicianDaily() {
       )}
 
       <div className="card">
-        <h2>ملخص تركيباتي اليوم</h2>
+        <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+          <h2>ملخص تركيباتي اليوم</h2>
+          {today.length > 0 && (
+            <span className="badge badge-ok">
+              إجمالي النقاط: {today.reduce((s, r) => s + (Number(r.points_earned) || 0), 0)}
+            </span>
+          )}
+        </div>
         {today.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>لسه معملتش أي تسجيل تركيب النهاردة.</p>
         ) : (
           <table>
             <thead>
-              <tr><th>المشروع</th><th>الباب</th><th>البند</th><th>الحالة</th><th></th></tr>
+              <tr><th>المشروع</th><th>الباب</th><th>البند</th><th>النقاط</th><th>الحالة</th><th></th></tr>
             </thead>
             <tbody>
               {today.map((r) => (
@@ -212,6 +219,7 @@ export default function TechnicianDaily() {
                   <td>{r.project_name}</td>
                   <td className="code-cell">{r.door_code}</td>
                   <td>{r.item_type}</td>
+                  <td className="code-cell">{r.points_earned}</td>
                   <td>
                     <span className={r.status === 'approved' ? 'badge badge-ok' : 'badge badge-pending'}>
                       {r.status === 'approved' ? 'معتمد' : 'بانتظار الاعتماد'}
