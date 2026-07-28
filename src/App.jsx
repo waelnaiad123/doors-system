@@ -11,6 +11,7 @@ import ApprovalScreen from './pages/ApprovalScreen'
 import ProjectAssignments from './pages/ProjectAssignments'
 import DeliveryScreen from './pages/DeliveryScreen'
 import UsersScreen from './pages/UsersScreen'
+import ReportsScreen from './pages/ReportsScreen'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -102,7 +103,7 @@ export default function App() {
             />
             <Route
               path="reports"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ComingSoon title="التقارير" /></RequireRole>}
+              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ReportsScreen /></RequireRole>}
             />
 
             <Route path="*" element={<HomeRedirect />} />
