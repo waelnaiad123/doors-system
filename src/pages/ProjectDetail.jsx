@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
+import { useAuth } from '../AuthContext'
 
 export default function ProjectDetail() {
   const { projectId } = useParams()
@@ -21,11 +23,14 @@ export default function ProjectDetail() {
     const [projRes, typesRes, doorsRes] = await Promise.all([
       supabase.from('projects').select('*').eq('id', projectId).single(),
       supabase.from('item_types').select('*').order('name'),
-      supabase
-        .from('doors')
-        .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, item_types(name))')
-        .eq('project_id', projectId)
-        .order('door_code'),
+      fetchAllRows((from, to) =>
+        supabase
+          .from('doors')
+          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, item_types(name))')
+          .eq('project_id', projectId)
+          .order('door_code')
+          .range(from, to)
+      ),
     ])
     const firstError = projRes.error || typesRes.error || doorsRes.error
     if (firstError) setError(firstError.message)
@@ -543,17 +548,31 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
 // ---------------------------------------------------------------------------
 function DoorsList({ doors, onReload, onError }) {
+  const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
 
   async function toggleType(door) {
     const nextType = door.door_type === 'vent_window' ? 'door' : 'vent_window'
     const label = nextType === 'vent_window' ? 'هواية/شباك' : 'باب عادي'
-    if (!window.confirm(`تحويل "${door.door_code}" إلى ${label}؟`)) return
+    const itemCount = (door.door_items || []).length
+    const warning = itemCount > 0
+      ? `تحويل "${door.door_code}" إلى ${label} هيمسح كل بنوده الحالية (${itemCount} بند) وأي تركيبات مسجلة عليها نهائيًا، عشان تضيف بنود ${label} من جديد. متأكد؟`
+      : `تحويل "${door.door_code}" إلى ${label}؟`
+    if (!window.confirm(warning)) return
     setBusyId(door.id)
-    const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
-    setBusyId('')
-    if (error) { onError(error.message); return }
-    onReload()
+    try {
+      if (itemCount > 0) {
+        const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', door.id)
+        if (delErr) throw delErr
+      }
+      const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
+      if (error) throw error
+      onReload()
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBusyId('')
+    }
   }
 
   if (doors.length === 0) {
@@ -581,9 +600,11 @@ function DoorsList({ doors, onReload, onError }) {
                 ))}
               </td>
               <td>
-                <button className="btn-secondary sm" disabled={busyId === d.id} onClick={() => toggleType(d)}>
-                  {d.door_type === 'vent_window' ? 'تحويل لباب' : 'تحويل لهواية/شباك'}
-                </button>
+                {profile.role === 'admin' && (
+                  <button className="btn-secondary sm" disabled={busyId === d.id} onClick={() => toggleType(d)}>
+                    {d.door_type === 'vent_window' ? 'تحويل لباب' : 'تحويل لهواية/شباك'}
+                  </button>
+                )}
               </td>
             </tr>
           ))}
