@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
 
 function aggregateBy(records, keyFn) {
   const m = new Map()
@@ -41,7 +42,9 @@ export default function ReportsScreen() {
 
   async function loadFilters() {
     const [projRes, peopleRes] = await Promise.all([
-      supabase.from('projects').select('id, project_name, project_number, location_code').order('project_name'),
+      fetchAllRows((from, to) =>
+        supabase.from('projects').select('id, project_name, project_number, location_code').order('project_name').range(from, to)
+      ),
       supabase.from('profiles').select('id, full_name, role').in('role', ['technician', 'supervisor', 'engineer']).order('full_name'),
     ])
     if (projRes.error) setError(projRes.error.message)
@@ -73,11 +76,13 @@ export default function ReportsScreen() {
       let deliveryData = []
 
       if (scope === 'installations' || scope === 'both') {
-        let q = supabase.from('v_installations_detail').select('*').eq('status', 'approved')
-        if (selectedProjectIds.size) q = q.in('project_id', Array.from(selectedProjectIds))
-        if (dateMode === 'range' && dateFrom) q = q.gte('installed_at', dateFrom)
-        if (dateMode === 'range' && dateTo) q = q.lte('installed_at', dateTo)
-        const { data, error } = await q
+        const { data, error } = await fetchAllRows((from, to) => {
+          let q = supabase.from('v_installations_detail').select('*').eq('status', 'approved')
+          if (selectedProjectIds.size) q = q.in('project_id', Array.from(selectedProjectIds))
+          if (dateMode === 'range' && dateFrom) q = q.gte('installed_at', dateFrom)
+          if (dateMode === 'range' && dateTo) q = q.lte('installed_at', dateTo)
+          return q.range(from, to)
+        })
         if (error) throw error
         installData = data || []
         if (selectedPersonIds.size) {
@@ -86,12 +91,14 @@ export default function ReportsScreen() {
       }
 
       if (scope === 'deliveries' || scope === 'both') {
-        let q = supabase.from('v_deliveries_detail').select('*').eq('status', 'approved')
-        if (selectedProjectIds.size) q = q.in('project_id', Array.from(selectedProjectIds))
-        if (deliveryTypeFilter !== 'both') q = q.eq('delivery_type', deliveryTypeFilter)
-        if (dateMode === 'range' && dateFrom) q = q.gte('delivered_at', dateFrom)
-        if (dateMode === 'range' && dateTo) q = q.lte('delivered_at', `${dateTo}T23:59:59`)
-        const { data, error } = await q
+        const { data, error } = await fetchAllRows((from, to) => {
+          let q = supabase.from('v_deliveries_detail').select('*').eq('status', 'approved')
+          if (selectedProjectIds.size) q = q.in('project_id', Array.from(selectedProjectIds))
+          if (deliveryTypeFilter !== 'both') q = q.eq('delivery_type', deliveryTypeFilter)
+          if (dateMode === 'range' && dateFrom) q = q.gte('delivered_at', dateFrom)
+          if (dateMode === 'range' && dateTo) q = q.lte('delivered_at', `${dateTo}T23:59:59`)
+          return q.range(from, to)
+        })
         if (error) throw error
         deliveryData = data || []
         if (selectedPersonIds.size) {
