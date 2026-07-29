@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import ProgressRing from '../components/ProgressRing'
 
@@ -29,10 +30,13 @@ export default function ApprovalScreen() {
   async function loadOverview() {
     setLoadingOverview(true)
     setError('')
-    const { data, error } = await supabase
-      .from('v_installations_detail')
-      .select('project_id, project_number, project_name, technician_role, status')
-      .eq('status', 'pending_review')
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase
+        .from('v_installations_detail')
+        .select('project_id, project_number, project_name, technician_role, status')
+        .eq('status', 'pending_review')
+        .range(from, to)
+    )
     if (error) { setError(error.message); setLoadingOverview(false); return }
     const eligible = (data || []).filter(canApprove)
     const m = new Map()
@@ -50,12 +54,15 @@ export default function ApprovalScreen() {
   async function loadRecords() {
     setLoadingRecords(true)
     setError('')
-    const { data, error } = await supabase
-      .from('v_installations_detail')
-      .select('*')
-      .eq('project_id', projectId)
-      .in('status', ['pending_review', 'approved'])
-      .order('door_code')
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase
+        .from('v_installations_detail')
+        .select('*')
+        .eq('project_id', projectId)
+        .in('status', ['pending_review', 'approved'])
+        .order('door_code')
+        .range(from, to)
+    )
     if (error) setError(error.message)
     setRecords(data || [])
     setSelected(new Set())
