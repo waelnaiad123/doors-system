@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import { ROLES, ROLE_LIST } from '../lib/roles'
 
@@ -24,7 +25,9 @@ export default function ProjectAssignments() {
   useEffect(() => { if (projectId) { loadAssignments(); loadDoors() } }, [projectId]) // eslint-disable-line
 
   async function loadProjects() {
-    const { data, error } = await supabase.from('projects').select('id, project_name, project_number').order('project_name')
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+    )
     if (error) setError(error.message)
     setProjects(data || [])
   }
@@ -36,7 +39,9 @@ export default function ProjectAssignments() {
   }
 
   async function loadDoors() {
-    const { data } = await supabase.from('doors').select('id, door_code').eq('project_id', projectId).order('door_code')
+    const { data } = await fetchAllRows((from, to) =>
+      supabase.from('doors').select('id, door_code').eq('project_id', projectId).order('door_code').range(from, to)
+    )
     setDoors(data || [])
   }
 
