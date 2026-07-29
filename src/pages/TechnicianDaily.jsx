@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 
 function todayStr() {
@@ -37,9 +38,11 @@ export default function TechnicianDaily() {
   async function loadPending() {
     setLoadingPending(true)
     setError('')
-    let q = supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('door_code')
-    if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
-    const { data, error } = await q
+    const { data, error } = await fetchAllRows((from, to) => {
+      let q = supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('door_code')
+      if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
+      return q.range(from, to)
+    })
     if (error) setError(error.message)
     setPending(data || [])
     setSelected(new Set())
