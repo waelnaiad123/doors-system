@@ -97,7 +97,8 @@ export default function ProjectDetail() {
 }
 
 // ---------------------------------------------------------------------------
-const VENT_ITEM_NAMES = ['حلق هواية', 'ريش هواية']
+const VENT_ONLY_ITEMS = ['عدد الهواية/الشباك']
+const VENT_ALLOWED_ITEMS = ['حلق', 'عدد الهواية/الشباك']
 
 function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
   const [doorCode, setDoorCode] = useState('')
@@ -107,8 +108,8 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
   const [saving, setSaving] = useState(false)
 
   const availableItemTypes = doorType === 'vent_window'
-    ? itemTypes.filter((t) => VENT_ITEM_NAMES.includes(t.name))
-    : itemTypes.filter((t) => !VENT_ITEM_NAMES.includes(t.name))
+    ? itemTypes.filter((t) => VENT_ALLOWED_ITEMS.includes(t.name))
+    : itemTypes.filter((t) => !VENT_ONLY_ITEMS.includes(t.name))
 
   function addRow() { setRows([...rows, { item_type_id: '', quantity: 1 }]) }
   function updateRow(i, patch) { setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r))) }
