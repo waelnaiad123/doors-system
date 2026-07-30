@@ -91,7 +91,7 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'list' && <DoorsList doors={doors} onReload={loadAll} onError={setError} />}
+      {tab === 'list' && <DoorsList doors={doors} itemTypes={itemTypes} onReload={loadAll} onError={setError} />}
     </div>
   )
 }
@@ -548,7 +548,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 }
 
 // ---------------------------------------------------------------------------
-function DoorsList({ doors, onReload, onError }) {
+function DoorsList({ doors, itemTypes, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
 
@@ -557,7 +557,7 @@ function DoorsList({ doors, onReload, onError }) {
     const label = nextType === 'vent_window' ? 'هواية/شباك' : 'باب عادي'
     const itemCount = (door.door_items || []).length
     const warning = itemCount > 0
-      ? `تحويل "${door.door_code}" إلى ${label} هيمسح كل بنوده الحالية (${itemCount} بند) وأي تركيبات مسجلة عليها نهائيًا، عشان تضيف بنود ${label} من جديد. متأكد؟`
+      ? `تحويل "${door.door_code}" إلى ${label} هيمسح كل بنوده الحالية (${itemCount} بند) وأي تركيبات مسجلة عليها نهائيًا${nextType === 'vent_window' ? '، وهيضيف بدلها بند "حلق" وبند "عدد الهواية/الشباك" بكمية 1 لكل منهما (تقدر تعدّل الكمية بعدين من الإضافة اليدوية)' : ''}. متأكد؟`
       : `تحويل "${door.door_code}" إلى ${label}؟`
     if (!window.confirm(warning)) return
     setBusyId(door.id)
@@ -568,6 +568,18 @@ function DoorsList({ doors, onReload, onError }) {
       }
       const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
       if (error) throw error
+
+      if (nextType === 'vent_window') {
+        const frameType = itemTypes.find((t) => t.name === 'حلق')
+        const countType = itemTypes.find((t) => t.name === 'عدد الهواية/الشباك')
+        const newItems = [frameType, countType]
+          .filter(Boolean)
+          .map((t) => ({ door_id: door.id, item_type_id: t.id, quantity: 1 }))
+        if (newItems.length > 0) {
+          const { error: insErr } = await supabase.from('door_items').insert(newItems)
+          if (insErr) throw insErr
+        }
+      }
       onReload()
     } catch (e) {
       onError(e.message)
