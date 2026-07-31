@@ -22,8 +22,8 @@ const NAV_BY_ROLE = {
     { to: '/technician', label: 'تسجيل تركيب' },
   ],
   supervisor: [
-    { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/workforce', label: 'حصر الأفراد' },
+    { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/reports', label: 'التقارير' },
   ],
