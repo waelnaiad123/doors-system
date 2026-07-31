@@ -207,9 +207,20 @@ export default function TechnicianDaily() {
             <option value="">
               {loadingProjects ? 'جارِ التحميل...' : '-- اختر مشروعًا --'}
             </option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-            ))}
+            {reminderProjects.length > 0 && (
+              <optgroup label="مشاريع فيها عمال ولسه محتاجة إدخال">
+                {reminderProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="باقي مشاريعي">
+              {projects
+                .filter((p) => !reminderProjects.some((r) => r.id === p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+                ))}
+            </optgroup>
           </select>
         </div>
 
