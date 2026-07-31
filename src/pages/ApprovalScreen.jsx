@@ -23,6 +23,7 @@ export default function ApprovalScreen() {
   const [projectId, setProjectId] = useState('')
   const [records, setRecords] = useState([])
   const [notes, setNotes] = useState([])
+  const [deliveries, setDeliveries] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [loadingOverview, setLoadingOverview] = useState(true)
   const [loadingRecords, setLoadingRecords] = useState(false)
@@ -40,7 +41,7 @@ export default function ApprovalScreen() {
   }
 
   useEffect(() => { loadOverview() }, []) // eslint-disable-line
-  useEffect(() => { if (projectId) { loadRecords(); loadNotes() } }, [projectId]) // eslint-disable-line
+  useEffect(() => { if (projectId) { loadRecords(); loadNotes(); loadDeliveries() } }, [projectId]) // eslint-disable-line
 
   async function loadOverview() {
     setLoadingOverview(true)
@@ -88,6 +89,31 @@ export default function ApprovalScreen() {
       .from('daily_project_notes').select('*, profiles!daily_project_notes_created_by_fkey(full_name)')
       .eq('project_id', projectId).order('note_date', { ascending: false })
     if (!error) setNotes(data || [])
+  }
+
+  async function loadDeliveries() {
+    if (profile.role !== 'engineer' && profile.role !== 'admin') { setDeliveries([]); return }
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('v_deliveries_detail').select('*').eq('project_id', projectId).eq('status', 'pending_review').range(from, to)
+    )
+    if (!error) setDeliveries(data || [])
+  }
+
+  async function reviewDelivery(id, newStatus) {
+    let reason = null
+    if (newStatus === 'rejected') reason = window.prompt('سبب الرفض (اختياري):') || null
+    setBusy(true)
+    setError('')
+    const { data, error } = await supabase
+      .from('deliveries')
+      .update({ status: newStatus, approved_by: profile.id, approved_at: new Date().toISOString(), ...(reason ? { notes: reason } : {}) })
+      .eq('id', id)
+      .select()
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    if (!data || data.length === 0) { setError('لم يتم تحديث أي بند — تأكد إنك مخصص كمهندس على هذا المشروع.'); return }
+    setNotice(newStatus === 'approved' ? 'تم اعتماد التسليم.' : 'تم رفض التسليم.')
+    await loadDeliveries()
   }
 
   const pending = useMemo(() => records.filter((r) => r.status === 'pending_review' || r.status === 'supervisor_approved'), [records])
@@ -371,6 +397,24 @@ export default function ApprovalScreen() {
           <h2 style={{ marginBottom: 10 }}>ملاحظات وأسباب عدم التنفيذ اليومية</h2>
           {notes.map((n) => (
             <NoteRow key={n.id} note={n} busy={busy} onReview={reviewNote} />
+          ))}
+        </div>
+      )}
+
+      {projectId && deliveries.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginBottom: 10 }}>تسليمات بانتظار الاعتماد ({deliveries.length})</h2>
+          {deliveries.map((d) => (
+            <div key={d.delivery_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg)', marginBottom: 6, flexWrap: 'wrap' }}>
+              <span className="code-cell">{d.door_code}</span>
+              <span style={{ flex: 1, fontSize: 14 }}>{d.item_type} × {d.quantity}</span>
+              <span style={{ fontSize: 12.5 }}>
+                {d.delivery_type === 'client' ? `عميل — ${d.client_delivery_date}` : `استشاري — ${d.consultant_wir_code}`}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{d.delivered_by_name}</span>
+              <button className="btn-ok sm" disabled={busy} onClick={() => reviewDelivery(d.delivery_id, 'approved')}>اعتماد</button>
+              <button className="btn-danger sm" disabled={busy} onClick={() => reviewDelivery(d.delivery_id, 'rejected')}>رفض</button>
+            </div>
           ))}
         </div>
       )}
