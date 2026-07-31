@@ -2,6 +2,7 @@ import React from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { ROLES } from '../lib/roles'
+import ReminderBanner from './ReminderBanner'
 
 const NAV_BY_ROLE = {
   admin: [
@@ -61,6 +62,7 @@ export default function Layout() {
         </div>
       </nav>
       <main className="main">
+        <ReminderBanner />
         <Outlet />
       </main>
     </div>
