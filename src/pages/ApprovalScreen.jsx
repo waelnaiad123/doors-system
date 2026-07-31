@@ -152,12 +152,16 @@ export default function ApprovalScreen() {
     try {
       // المشرف اعتماده يوقف عند مرحلة وسيطة، المهندس/الأدمن اعتمادهم نهائي مباشرة
       const nextStatus = profile.role === 'supervisor' ? 'supervisor_approved' : 'approved'
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('installation_records')
         .update({ status: nextStatus, supervisor_id: profile.id, reviewed_at: new Date().toISOString() })
         .in('id', ids)
+        .select()
       if (error) throw error
-      setNotice(`تم اعتماد ${ids.length} بند بنجاح.`)
+      if (!data || data.length === 0) {
+        throw new Error('لم يتم تحديث أي بند — غالبًا إنت مش مخصص على هذا المشروع بالدور المناسب. راجع "تخصيص المشاريع".')
+      }
+      setNotice(`تم اعتماد ${data.length} بند بنجاح.`)
       await Promise.all([loadRecords(), loadOverview()])
     } catch (e) {
       setError(e.message)
@@ -170,12 +174,17 @@ export default function ApprovalScreen() {
     const reason = window.prompt('سبب الرفض (اختياري):') || null
     setBusy(true)
     setError('')
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('installation_records')
       .update({ status: 'rejected', supervisor_id: profile.id, reviewed_at: new Date().toISOString(), notes: reason })
       .eq('id', id)
+      .select()
     setBusy(false)
     if (error) { setError(error.message); return }
+    if (!data || data.length === 0) {
+      setError('لم يتم تحديث البند — غالبًا إنت مش مخصص على هذا المشروع بالدور المناسب.')
+      return
+    }
     await Promise.all([loadRecords(), loadOverview()])
   }
 
