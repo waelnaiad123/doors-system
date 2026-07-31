@@ -148,6 +148,47 @@ tr:hover td { background: var(--bg); }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
 .empty-state .icon { font-size: 28px; margin-bottom: 8px; }
 
+.reminder-banner {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 18px;
+}
+.reminder-line {
+  display: block;
+  background: var(--pending-soft); color: var(--pending);
+  border: 1px solid var(--pending);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 13.5px; font-weight: 600;
+  text-decoration: none;
+}
+.reminder-line:hover { filter: brightness(0.97); }
+
+/* عناصر اختيار كبيرة وسهلة اللمس - لشاشة الفني على الموبايل/التابلت في الموقع */
+.chip-select {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 14px; border-radius: 10px; font-size: 14.5px; font-weight: 600;
+  border: 1.5px solid var(--border); cursor: pointer; min-height: 42px;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.chip-select input { width: 21px; height: 21px; flex-shrink: 0; }
+.chip-select.selected { background: var(--pending-soft); color: var(--pending); border-color: var(--pending); }
+.chip-select.unselected { background: var(--bg); color: var(--ink); }
+
+.door-select-all { width: 26px; height: 26px; flex-shrink: 0; cursor: pointer; }
+
+/* شريط إجراء ثابت أسفل الشاشة - يفضل ظاهر أثناء التمرير في القوائم الطويلة */
+.sticky-action-bar {
+  position: sticky; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  margin: 14px -18px -18px;
+  padding: 12px 18px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  box-shadow: 0 -6px 14px rgba(15, 27, 42, 0.08);
+}
+@media (max-width: 780px) {
+  .sticky-action-bar { margin: 14px -14px -14px; padding: 12px 14px; }
+}
+
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 13.5px; margin-bottom: 14px; }
 .alert-error { background: var(--danger-soft); color: var(--danger); }
 .alert-ok { background: var(--ok-soft); color: var(--ok); }
