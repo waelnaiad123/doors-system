@@ -1,0 +1,182 @@
+import React, { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/fetchAll'
+
+export default function ProjectStatusReport() {
+  const [projects, setProjects] = useState([])
+  const [projectId, setProjectId] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [rows, setRows] = useState([])
+  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [loadingRows, setLoadingRows] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => { loadProjects() }, []) // eslint-disable-line
+  useEffect(() => { if (projectId) loadStatus() }, [projectId]) // eslint-disable-line
+
+  async function loadProjects() {
+    setLoadingProjects(true)
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+    )
+    if (error) setError(error.message)
+    setProjects(data || [])
+    setLoadingProjects(false)
+  }
+
+  async function loadStatus() {
+    setLoadingRows(true)
+    setError('')
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('v_door_item_status').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+    )
+    if (error) setError(error.message)
+    setRows(data || [])
+    const p = projects.find((x) => x.id === projectId)
+    setProjectName(p ? `${p.project_number} — ${p.project_name}` : '')
+    setLoadingRows(false)
+  }
+
+  function colorOf(r) {
+    if (r.consultant_delivered) return 'green'
+    if (r.client_delivered) return 'blue'
+    if (r.installed) return 'yellow'
+    return null
+  }
+
+  const itemTypes = useMemo(() => {
+    return Array.from(new Set(rows.map((r) => r.item_type))).sort((a, b) => a.localeCompare(b, 'ar'))
+  }, [rows])
+
+  const summary = useMemo(() => {
+    const m = new Map()
+    itemTypes.forEach((t) => m.set(t, { total: 0, installed: 0, client: 0, consultant: 0 }))
+    rows.forEach((r) => {
+      const s = m.get(r.item_type)
+      const q = Number(r.quantity) || 0
+      s.total += q
+      if (r.installed) s.installed += q
+      if (r.client_delivered) s.client += q
+      if (r.consultant_delivered) s.consultant += q
+    })
+    return m
+  }, [rows, itemTypes])
+
+  const doorsGrouped = useMemo(() => {
+    const m = new Map()
+    rows.forEach((r) => {
+      if (!m.has(r.door_code)) m.set(r.door_code, { door_code: r.door_code, door_type: r.door_type, location: r.location, items: [] })
+      m.get(r.door_code).items.push(r)
+    })
+    return Array.from(m.values())
+  }, [rows])
+
+  return (
+    <div>
+      <div className="no-print">
+        <h1>موقف تركيبات وتسليمات المشروع</h1>
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <div className="card">
+          <div className="field">
+            <label>اختر المشروع</label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
+              <option value="">{loadingProjects ? 'جارِ التحميل...' : '-- اختر مشروعًا --'}</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {projectId && !loadingRows && rows.length > 0 && (
+        <>
+          <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+            <button className="btn-primary" onClick={() => window.print()}>🖨 طباعة التقرير</button>
+          </div>
+
+          <h2 style={{ marginBottom: 4 }}>{projectName}</h2>
+
+          <div className="status-legend">
+            <span><span className="dot" style={{ background: 'var(--status-yellow)' }}></span>تركيب معتمد</span>
+            <span><span className="dot" style={{ background: 'var(--status-blue)' }}></span>تسليم للعميل</span>
+            <span><span className="dot" style={{ background: 'var(--status-green)' }}></span>تسليم للاستشاري (نهائي)</span>
+          </div>
+
+          <div className="card">
+            <h3 style={{ marginBottom: 8 }}>ملخص إجمالي لكل بند</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th></th>
+                    {itemTypes.map((t) => <th key={t}>{t}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>الإجمالي</strong></td>
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).total}</td>)}
+                  </tr>
+                  <tr>
+                    <td><strong>تركيب معتمد</strong></td>
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).installed}</td>)}
+                  </tr>
+                  <tr>
+                    <td><strong>تسليم للعميل</strong></td>
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).client}</td>)}
+                  </tr>
+                  <tr>
+                    <td><strong>تسليم للاستشاري</strong></td>
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).consultant}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>كود الباب</th>
+                  <th>النوع</th>
+                  <th>الموقع</th>
+                  <th>البنود</th>
+                </tr>
+              </thead>
+              <tbody>
+                {doorsGrouped.map((d) => (
+                  <tr key={d.door_code}>
+                    <td className="code-cell">{d.door_code}</td>
+                    <td>{d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}</td>
+                    <td>{d.location || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {d.items.map((it) => {
+                          const c = colorOf(it)
+                          const cls = c === 'green' ? 'badge-status-green' : c === 'blue' ? 'badge-status-blue' : c === 'yellow' ? 'badge-status-yellow' : 'badge-empty'
+                          return (
+                            <span key={it.door_item_id} className={`badge ${cls}`}>
+                              {it.item_type} × {it.quantity}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {projectId && loadingRows && <p className="no-print" style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>}
+      {projectId && !loadingRows && rows.length === 0 && (
+        <div className="card empty-state no-print"><div className="icon">📋</div>لا توجد أبواب في هذا المشروع بعد.</div>
+      )}
+    </div>
+  )
+}
