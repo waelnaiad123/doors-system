@@ -14,6 +14,12 @@ export default function ProjectAssignments() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const allowedRoles = useMemo(() => {
+    if (profile.role === 'data_entry') return ['engineer']
+    if (profile.role === 'engineer') return ['technician', 'supervisor', 'delivery_entry']
+    return ROLE_LIST.filter((r) => r !== 'admin')
+  }, [profile.role])
+
   const [newUserId, setNewUserId] = useState('')
   const [newRole, setNewRole] = useState(profile.role === 'data_entry' ? 'engineer' : 'technician')
   const [scopeMode, setScopeMode] = useState('whole')
@@ -139,7 +145,7 @@ export default function ProjectAssignments() {
                   <option value="">اختر...</option>
                   {profiles
                     .filter((p) => p.is_active)
-                    .filter((p) => profile.role !== 'data_entry' || p.role === 'engineer')
+                    .filter((p) => allowedRoles.includes(p.role))
                     .map((p) => (
                       <option key={p.id} value={p.id}>{p.full_name} ({ROLES[p.role]})</option>
                     ))}
@@ -148,13 +154,18 @@ export default function ProjectAssignments() {
               <div className="field">
                 <label>الدور في هذا المشروع</label>
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-                  {(profile.role === 'data_entry' ? ['engineer'] : ROLE_LIST.filter((r) => r !== 'admin')).map((r) => (
+                  {allowedRoles.map((r) => (
                     <option key={r} value={r}>{ROLES[r]}</option>
                   ))}
                 </select>
                 {profile.role === 'data_entry' && (
                   <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
                     تقدر تخصص مهندس (أو أكتر من مهندس) للمشروع بس. المهندس بعدها يقدر يخصص باقي الفنيين والمشرفين.
+                  </p>
+                )}
+                {profile.role === 'engineer' && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                    تقدر تخصص فني، مشرف، أو مدخل بيانات تسليمات على المشروع ده.
                   </p>
                 )}
               </div>
