@@ -23,8 +23,60 @@ export default function TechnicianDaily() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const [workforceToday, setWorkforceToday] = useState([])
+  const [notesToday, setNotesToday] = useState([])
+  const [installNotes, setInstallNotes] = useState('')
+  const [nonExecReason, setNonExecReason] = useState('')
+  const [noteStatus, setNoteStatus] = useState(null)
+  const [savingNote, setSavingNote] = useState(false)
+
   useEffect(() => { loadProjects(); loadToday() }, []) // eslint-disable-line
   useEffect(() => { if (projectId) loadPending() }, [projectId, search]) // eslint-disable-line
+  useEffect(() => { if (projectId) loadNote() }, [projectId]) // eslint-disable-line
+  useEffect(() => { if (projects.length > 0) loadWorkforceReminder() }, [projects]) // eslint-disable-line
+
+  async function loadWorkforceReminder() {
+    const projectIds = projects.map((p) => p.id)
+    const { data } = await supabase
+      .from('daily_workforce').select('project_id, headcount')
+      .eq('work_date', todayStr()).gt('headcount', 0).in('project_id', projectIds)
+    setWorkforceToday(data || [])
+    const { data: notesData } = await supabase
+      .from('daily_project_notes').select('project_id')
+      .eq('note_date', todayStr()).eq('created_by', profile.id)
+    setNotesToday(notesData || [])
+  }
+
+  async function loadNote() {
+    const { data } = await supabase
+      .from('daily_project_notes').select('*')
+      .eq('project_id', projectId).eq('note_date', todayStr()).eq('created_by', profile.id)
+      .maybeSingle()
+    if (data) {
+      setInstallNotes(data.installation_notes || '')
+      setNonExecReason(data.non_execution_reason || '')
+      setNoteStatus(data.status)
+    } else {
+      setInstallNotes(''); setNonExecReason(''); setNoteStatus(null)
+    }
+  }
+
+  async function saveNote() {
+    if (!installNotes.trim() && !nonExecReason.trim()) { setError('اكتب حاجة في إحدى الخانتين الأول'); return }
+    setSavingNote(true)
+    setError('')
+    const { error } = await supabase
+      .from('daily_project_notes')
+      .upsert({
+        project_id: projectId, note_date: todayStr(), created_by: profile.id,
+        installation_notes: installNotes.trim() || null,
+        non_execution_reason: nonExecReason.trim() || null,
+      }, { onConflict: 'project_id,note_date,created_by' })
+    setSavingNote(false)
+    if (error) { setError(error.message); return }
+    setNotice('تم حفظ الملاحظات.')
+    await Promise.all([loadNote(), loadWorkforceReminder()])
+  }
 
   async function loadProjects() {
     setLoadingProjects(true)
@@ -71,6 +123,19 @@ export default function TechnicianDaily() {
   const MAX_DOORS_SHOWN = 100
   const visibleDoors = groupedByDoor.slice(0, MAX_DOORS_SHOWN)
 
+  const enteredProjectIds = useMemo(() => {
+    const s = new Set(today.map((r) => r.project_id))
+    notesToday.forEach((n) => s.add(n.project_id))
+    return s
+  }, [today, notesToday])
+
+  const reminderProjects = useMemo(() => {
+    return workforceToday
+      .filter((w) => !enteredProjectIds.has(w.project_id))
+      .map((w) => projects.find((p) => p.id === w.project_id))
+      .filter(Boolean)
+  }, [workforceToday, enteredProjectIds, projects])
+
   function toggle(id) {
     setSelected((s) => {
       const n = new Set(s)
@@ -98,7 +163,7 @@ export default function TechnicianDaily() {
       const { error } = await supabase.from('installation_records').insert(rows)
       if (error) throw error
       setNotice(`تم تسجيل ${rows.length} بند بنجاح، بانتظار اعتماد المشرف.`)
-      await Promise.all([loadPending(), loadToday()])
+      await Promise.all([loadPending(), loadToday(), loadWorkforceReminder()])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -110,7 +175,7 @@ export default function TechnicianDaily() {
     setError('')
     const { error } = await supabase.from('installation_records').delete().eq('id', installationId)
     if (error) { setError(error.message); return }
-    await Promise.all([loadPending(), loadToday()])
+    await Promise.all([loadPending(), loadToday(), loadWorkforceReminder()])
   }
 
   return (
@@ -119,6 +184,21 @@ export default function TechnicianDaily() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
+
+      {reminderProjects.length > 0 && (
+        <div className="alert alert-error">
+          ⚠️ فيه مشاريع بها عمال النهاردة ولسه ما اتسجّلش فيها تركيب أو ملاحظة:{' '}
+          {reminderProjects.map((p, i) => (
+            <span key={p.id}>
+              <button type="button" onClick={() => setProjectId(p.id)}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>
+                {p.project_name}
+              </button>
+              {i < reminderProjects.length - 1 ? '، ' : ''}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="card">
         <div className="field">
@@ -140,6 +220,28 @@ export default function TechnicianDaily() {
           </div>
         )}
       </div>
+
+      {projectId && (
+        <div className="card">
+          <h2 style={{ marginBottom: 10 }}>ملاحظات اليوم عن المشروع</h2>
+          {noteStatus && (
+            <div className="alert alert-ok" style={{ marginBottom: 10 }}>
+              الحالة: {noteStatus === 'approved' ? 'معتمدة' : noteStatus === 'rejected' ? 'مرفوضة' : 'بانتظار الاعتماد'}
+            </div>
+          )}
+          <div className="field">
+            <label>ملاحظات تركيب (أي عمل إضافي تم في المشروع)</label>
+            <textarea rows={2} style={{ width: '100%' }} value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>أسباب عدم التنفيذ (لو حصلت مشكلة منعت التركيب النهاردة)</label>
+            <textarea rows={2} style={{ width: '100%' }} value={nonExecReason} onChange={(e) => setNonExecReason(e.target.value)} />
+          </div>
+          <button className="btn-secondary" disabled={savingNote} onClick={saveNote}>
+            {savingNote ? 'جارِ الحفظ...' : 'حفظ الملاحظات'}
+          </button>
+        </div>
+      )}
 
       {projectId && (
         <div className="card">
