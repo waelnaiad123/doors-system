@@ -13,19 +13,23 @@ const NAV_BY_ROLE = {
     { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/delivery', label: 'التسليمات' },
+    { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
   ],
   data_entry: [
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المهندس' },
+    { to: '/project-status', label: 'موقف مشروع' },
   ],
   technician: [
     { to: '/technician', label: 'تسجيل تركيب' },
+    { to: '/project-status', label: 'موقف مشروع' },
   ],
   supervisor: [
     { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
+    { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
   ],
   engineer: [
@@ -33,10 +37,12 @@ const NAV_BY_ROLE = {
     { to: '/assignments', label: 'تخصيص المشاريع' },
     { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
+    { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
   ],
   delivery_entry: [
     { to: '/delivery', label: 'التسليمات' },
+    { to: '/project-status', label: 'موقف مشروع' },
   ],
 }
 
