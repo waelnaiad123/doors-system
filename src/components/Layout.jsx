@@ -9,23 +9,27 @@ const NAV_BY_ROLE = {
     { to: '/assignments', label: 'تخصيص المشاريع' },
     { to: '/users', label: 'المستخدمون' },
     { to: '/technician', label: 'تسجيل تركيب' },
+    { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/delivery', label: 'التسليمات' },
     { to: '/reports', label: 'التقارير' },
   ],
   data_entry: [
     { to: '/projects', label: 'المشاريع' },
+    { to: '/assignments', label: 'تخصيص المهندس' },
   ],
   technician: [
     { to: '/technician', label: 'تسجيل تركيب' },
   ],
   supervisor: [
+    { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/reports', label: 'التقارير' },
   ],
   engineer: [
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المشاريع' },
+    { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/reports', label: 'التقارير' },
   ],
