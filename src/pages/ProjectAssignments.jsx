@@ -15,7 +15,7 @@ export default function ProjectAssignments() {
   const [notice, setNotice] = useState('')
 
   const [newUserId, setNewUserId] = useState('')
-  const [newRole, setNewRole] = useState('technician')
+  const [newRole, setNewRole] = useState(profile.role === 'data_entry' ? 'engineer' : 'technician')
   const [scopeMode, setScopeMode] = useState('whole')
   const [doorSearch, setDoorSearch] = useState('')
   const [selectedDoors, setSelectedDoors] = useState(new Set())
@@ -137,18 +137,26 @@ export default function ProjectAssignments() {
                 <label>المستخدم</label>
                 <select value={newUserId} onChange={(e) => setNewUserId(e.target.value)}>
                   <option value="">اختر...</option>
-                  {profiles.filter((p) => p.is_active).map((p) => (
-                    <option key={p.id} value={p.id}>{p.full_name} ({ROLES[p.role]})</option>
-                  ))}
+                  {profiles
+                    .filter((p) => p.is_active)
+                    .filter((p) => profile.role !== 'data_entry' || p.role === 'engineer')
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.full_name} ({ROLES[p.role]})</option>
+                    ))}
                 </select>
               </div>
               <div className="field">
                 <label>الدور في هذا المشروع</label>
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-                  {ROLE_LIST.filter((r) => r !== 'admin').map((r) => (
+                  {(profile.role === 'data_entry' ? ['engineer'] : ROLE_LIST.filter((r) => r !== 'admin')).map((r) => (
                     <option key={r} value={r}>{ROLES[r]}</option>
                   ))}
                 </select>
+                {profile.role === 'data_entry' && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                    تقدر تخصص مهندس (أو أكتر من مهندس) للمشروع بس. المهندس بعدها يقدر يخصص باقي الفنيين والمشرفين.
+                  </p>
+                )}
               </div>
             </div>
 
