@@ -12,6 +12,7 @@ import ProjectAssignments from './pages/ProjectAssignments'
 import DeliveryScreen from './pages/DeliveryScreen'
 import UsersScreen from './pages/UsersScreen'
 import ReportsScreen from './pages/ReportsScreen'
+import WorkforceScreen from './pages/WorkforceScreen'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -82,8 +83,12 @@ export default function App() {
               element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><ProjectDetail /></RequireRole>}
             />
             <Route
+              path="workforce"
+              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><WorkforceScreen /></RequireRole>}
+            />
+            <Route
               path="assignments"
-              element={<RequireRole roles={['admin', 'engineer']}><ProjectAssignments /></RequireRole>}
+              element={<RequireRole roles={['admin', 'engineer', 'data_entry']}><ProjectAssignments /></RequireRole>}
             />
             <Route
               path="users"
