@@ -144,7 +144,7 @@ export default function UsersScreen() {
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
-                <tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الحالة</th><th>إنشاء مشاريع</th><th></th></tr>
+                <tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الحالة</th><th>إنشاء مشاريع</th><th>تفويض شامل</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((u) => (
@@ -168,6 +168,27 @@ export default function UsersScreen() {
                         <input type="checkbox" checked={!!u.can_create_projects} disabled={busyId === u.id}
                           onChange={(e) => updateField(u, 'can_create_projects', e.target.checked)} style={{ width: 20, height: 20 }} />
                       ) : '—'}
+                    </td>
+                    <td>
+                      {u.role === 'data_entry' && (
+                        <button
+                          className={u.all_projects_data_entry ? 'btn-ok sm' : 'btn-secondary sm'}
+                          disabled={busyId === u.id}
+                          onClick={() => updateField(u, 'all_projects_data_entry', !u.all_projects_data_entry)}
+                        >
+                          {u.all_projects_data_entry ? 'كل المشاريع ✓' : 'تفويض لكل المشاريع'}
+                        </button>
+                      )}
+                      {u.role === 'delivery_entry' && (
+                        <button
+                          className={u.all_projects_delivery_entry ? 'btn-ok sm' : 'btn-secondary sm'}
+                          disabled={busyId === u.id}
+                          onClick={() => updateField(u, 'all_projects_delivery_entry', !u.all_projects_delivery_entry)}
+                        >
+                          {u.all_projects_delivery_entry ? 'كل المشاريع ✓' : 'تفويض لكل المشاريع'}
+                        </button>
+                      )}
+                      {u.role !== 'data_entry' && u.role !== 'delivery_entry' && '—'}
                     </td>
                     <td>
                       <button className="btn-secondary sm" disabled={busyId === u.id} onClick={() => handleResetPassword(u)}>
