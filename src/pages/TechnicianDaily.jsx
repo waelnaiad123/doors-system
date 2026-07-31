@@ -28,6 +28,7 @@ export default function TechnicianDaily() {
   const [installNotes, setInstallNotes] = useState('')
   const [nonExecReason, setNonExecReason] = useState('')
   const [noteStatus, setNoteStatus] = useState(null)
+  const [notesOpen, setNotesOpen] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
 
   useEffect(() => { loadProjects(); loadToday() }, []) // eslint-disable-line
@@ -56,8 +57,10 @@ export default function TechnicianDaily() {
       setInstallNotes(data.installation_notes || '')
       setNonExecReason(data.non_execution_reason || '')
       setNoteStatus(data.status)
+      setNotesOpen(true)
     } else {
       setInstallNotes(''); setNonExecReason(''); setNoteStatus(null)
+      setNotesOpen(false)
     }
   }
 
@@ -234,23 +237,32 @@ export default function TechnicianDaily() {
 
       {projectId && (
         <div className="card">
-          <h2 style={{ marginBottom: 10 }}>ملاحظات اليوم عن المشروع</h2>
-          {noteStatus && (
-            <div className="alert alert-ok" style={{ marginBottom: 10 }}>
-              الحالة: {noteStatus === 'approved' ? 'معتمدة' : noteStatus === 'rejected' ? 'مرفوضة' : 'بانتظار الاعتماد'}
-            </div>
+          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+            <h2 style={{ marginBottom: 0 }}>ملاحظات اليوم عن المشروع (اختياري)</h2>
+            <button className="btn-secondary sm" onClick={() => setNotesOpen((s) => !s)}>
+              {notesOpen ? 'إخفاء' : (installNotes || nonExecReason) ? 'عرض' : '+ إضافة'}
+            </button>
+          </div>
+          {notesOpen && (
+            <>
+              {noteStatus && (
+                <div className="alert alert-ok" style={{ marginTop: 10 }}>
+                  الحالة: {noteStatus === 'approved' ? 'معتمدة' : noteStatus === 'rejected' ? 'مرفوضة' : 'بانتظار الاعتماد'}
+                </div>
+              )}
+              <div className="field" style={{ marginTop: 10 }}>
+                <label>ملاحظات تركيب (أي عمل إضافي تم في المشروع)</label>
+                <textarea rows={2} style={{ width: '100%' }} value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>أسباب عدم التنفيذ (لو حصلت مشكلة منعت التركيب النهاردة)</label>
+                <textarea rows={2} style={{ width: '100%' }} value={nonExecReason} onChange={(e) => setNonExecReason(e.target.value)} />
+              </div>
+              <button className="btn-secondary" disabled={savingNote} onClick={saveNote}>
+                {savingNote ? 'جارِ الحفظ...' : 'حفظ الملاحظات'}
+              </button>
+            </>
           )}
-          <div className="field">
-            <label>ملاحظات تركيب (أي عمل إضافي تم في المشروع)</label>
-            <textarea rows={2} style={{ width: '100%' }} value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>أسباب عدم التنفيذ (لو حصلت مشكلة منعت التركيب النهاردة)</label>
-            <textarea rows={2} style={{ width: '100%' }} value={nonExecReason} onChange={(e) => setNonExecReason(e.target.value)} />
-          </div>
-          <button className="btn-secondary" disabled={savingNote} onClick={saveNote}>
-            {savingNote ? 'جارِ الحفظ...' : 'حفظ الملاحظات'}
-          </button>
         </div>
       )}
 
