@@ -4,11 +4,25 @@ import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import ProgressRing from '../components/ProgressRing'
 
+const STATUS_LABEL = {
+  pending_review: 'بانتظار اعتماد المشرف',
+  supervisor_approved: 'معتمد من المشرف - بانتظار المهندس',
+  approved: 'معتمد نهائيًا',
+  rejected: 'مرفوض',
+}
+const STATUS_BADGE = {
+  pending_review: 'badge-pending',
+  supervisor_approved: 'badge-pending',
+  approved: 'badge-ok',
+  rejected: 'badge-danger',
+}
+
 export default function ApprovalScreen() {
   const { profile } = useAuth()
   const [projectsPending, setProjectsPending] = useState([])
   const [projectId, setProjectId] = useState('')
   const [records, setRecords] = useState([])
+  const [notes, setNotes] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [loadingOverview, setLoadingOverview] = useState(true)
   const [loadingRecords, setLoadingRecords] = useState(false)
@@ -18,14 +32,15 @@ export default function ApprovalScreen() {
   const [summaryView, setSummaryView] = useState('item')
   const [showSummary, setShowSummary] = useState(true)
 
+  // بند ما زال بانتظار مرحلة اعتماد أنا لسه أقدر أتصرف فيها؟
   function canApprove(rec) {
     if (profile.role === 'admin' || profile.role === 'engineer') return true
-    if (profile.role === 'supervisor') return rec.technician_role !== 'supervisor'
+    if (profile.role === 'supervisor') return rec.status === 'pending_review' && rec.technician_role !== 'supervisor'
     return false
   }
 
   useEffect(() => { loadOverview() }, []) // eslint-disable-line
-  useEffect(() => { if (projectId) loadRecords() }, [projectId]) // eslint-disable-line
+  useEffect(() => { if (projectId) { loadRecords(); loadNotes() } }, [projectId]) // eslint-disable-line
 
   async function loadOverview() {
     setLoadingOverview(true)
@@ -34,7 +49,7 @@ export default function ApprovalScreen() {
       supabase
         .from('v_installations_detail')
         .select('project_id, project_number, project_name, technician_role, status')
-        .eq('status', 'pending_review')
+        .in('status', ['pending_review', 'supervisor_approved'])
         .range(from, to)
     )
     if (error) { setError(error.message); setLoadingOverview(false); return }
@@ -46,7 +61,6 @@ export default function ApprovalScreen() {
     })
     const list = Array.from(m.values()).sort((a, b) => b.count - a.count)
     setProjectsPending(list)
-    // لو المشروع المفتوح حاليًا ما بقاش محتاج اعتماد (خلصنا كل حاجة فيه)، اقفله
     if (projectId && !list.some((p) => p.project_id === projectId)) setProjectId('')
     setLoadingOverview(false)
   }
@@ -59,7 +73,7 @@ export default function ApprovalScreen() {
         .from('v_installations_detail')
         .select('*')
         .eq('project_id', projectId)
-        .in('status', ['pending_review', 'approved'])
+        .in('status', ['pending_review', 'supervisor_approved', 'approved'])
         .order('door_code')
         .range(from, to)
     )
@@ -69,7 +83,14 @@ export default function ApprovalScreen() {
     setLoadingRecords(false)
   }
 
-  const pending = useMemo(() => records.filter((r) => r.status === 'pending_review'), [records])
+  async function loadNotes() {
+    const { data, error } = await supabase
+      .from('daily_project_notes').select('*, profiles!daily_project_notes_created_by_fkey(full_name)')
+      .eq('project_id', projectId).order('note_date', { ascending: false })
+    if (!error) setNotes(data || [])
+  }
+
+  const pending = useMemo(() => records.filter((r) => r.status === 'pending_review' || r.status === 'supervisor_approved'), [records])
   const eligiblePending = useMemo(() => pending.filter(canApprove), [pending]) // eslint-disable-line
 
   const groupedByDoor = useMemo(() => {
@@ -81,12 +102,17 @@ export default function ApprovalScreen() {
     return Array.from(m.values())
   }, [pending])
 
+  function bucketOf(status) {
+    if (status === 'approved') return 'approved'
+    if (status === 'supervisor_approved') return 'supervisor_approved'
+    return 'pending'
+  }
+
   const summaryByItem = useMemo(() => {
     const m = new Map()
     records.forEach((r) => {
-      if (!m.has(r.item_type)) m.set(r.item_type, { key: r.item_type, approved: 0, pending: 0 })
-      const row = m.get(r.item_type)
-      r.status === 'approved' ? row.approved++ : row.pending++
+      if (!m.has(r.item_type)) m.set(r.item_type, { key: r.item_type, approved: 0, supervisor_approved: 0, pending: 0 })
+      m.get(r.item_type)[bucketOf(r.status)]++
     })
     return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key, 'ar'))
   }, [records])
@@ -94,9 +120,8 @@ export default function ApprovalScreen() {
   const summaryByDoor = useMemo(() => {
     const m = new Map()
     records.forEach((r) => {
-      if (!m.has(r.door_code)) m.set(r.door_code, { key: r.door_code, approved: 0, pending: 0 })
-      const row = m.get(r.door_code)
-      r.status === 'approved' ? row.approved++ : row.pending++
+      if (!m.has(r.door_code)) m.set(r.door_code, { key: r.door_code, approved: 0, supervisor_approved: 0, pending: 0 })
+      m.get(r.door_code)[bucketOf(r.status)]++
     })
     return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key))
   }, [records])
@@ -125,9 +150,11 @@ export default function ApprovalScreen() {
     setBusy(true)
     setError('')
     try {
+      // المشرف اعتماده يوقف عند مرحلة وسيطة، المهندس/الأدمن اعتمادهم نهائي مباشرة
+      const nextStatus = profile.role === 'supervisor' ? 'supervisor_approved' : 'approved'
       const { error } = await supabase
         .from('installation_records')
-        .update({ status: 'approved', supervisor_id: profile.id, reviewed_at: new Date().toISOString() })
+        .update({ status: nextStatus, supervisor_id: profile.id, reviewed_at: new Date().toISOString() })
         .in('id', ids)
       if (error) throw error
       setNotice(`تم اعتماد ${ids.length} بند بنجاح.`)
@@ -150,6 +177,19 @@ export default function ApprovalScreen() {
     setBusy(false)
     if (error) { setError(error.message); return }
     await Promise.all([loadRecords(), loadOverview()])
+  }
+
+  async function reviewNote(note, newStatus, editedText) {
+    setBusy(true)
+    setError('')
+    const payload = {
+      status: newStatus, reviewed_by: profile.id, reviewed_at: new Date().toISOString(),
+    }
+    if (editedText !== undefined) payload.installation_notes = editedText
+    const { error } = await supabase.from('daily_project_notes').update(payload).eq('id', note.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    await loadNotes()
   }
 
   return (
@@ -199,8 +239,8 @@ export default function ApprovalScreen() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
                 <ProgressRing percent={overallPct} size={56} />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{totalApproved} من {totalAll} بند معتمد</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{pending.length} بند بانتظار الاعتماد</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{totalApproved} من {totalAll} بند معتمد نهائيًا</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{pending.length} بند لسه محتاج اعتماد</div>
                   <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>النقاط: {approvedPoints} معتمدة من {totalPoints} إجمالي</div>
                 </div>
               </div>
@@ -213,14 +253,15 @@ export default function ApprovalScreen() {
                   <thead>
                     <tr>
                       <th>{summaryView === 'item' ? 'البند' : 'الباب'}</th>
-                      <th>معتمد</th><th>بانتظار</th><th>إجمالي</th>
+                      <th>معتمد نهائيًا</th><th>معتمد من المشرف</th><th>بانتظار</th><th>إجمالي</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(summaryView === 'item' ? summaryByItem : summaryByDoor).map((row) => (
                       <tr key={row.key}>
                         <td className={summaryView === 'door' ? 'code-cell' : ''}>{row.key}</td>
-                        <td>{row.approved}</td><td>{row.pending}</td><td>{row.approved + row.pending}</td>
+                        <td>{row.approved}</td><td>{row.supervisor_approved}</td><td>{row.pending}</td>
+                        <td>{row.approved + row.supervisor_approved + row.pending}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -285,6 +326,7 @@ export default function ApprovalScreen() {
                               <span title="يحتاج اعتماد مهندس" style={{ flexShrink: 0 }}>🔒</span>
                             )}
                             <span style={{ flex: 1, fontSize: 14 }}>{r.item_type} × {r.quantity}</span>
+                            <span className={`badge ${STATUS_BADGE[r.status]}`} style={{ fontSize: 11 }}>{STATUS_LABEL[r.status]}</span>
                             <span className="badge badge-empty" style={{ fontSize: 11 }}>{r.points_earned} نقطة</span>
                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.technician_name}</span>
                             {eligible && (
@@ -312,6 +354,55 @@ export default function ApprovalScreen() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {projectId && notes.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginBottom: 10 }}>ملاحظات وأسباب عدم التنفيذ اليومية</h2>
+          {notes.map((n) => (
+            <NoteRow key={n.id} note={n} busy={busy} onReview={reviewNote} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NoteRow({ note, busy, onReview }) {
+  const [text, setText] = useState(note.installation_notes || '')
+  const [editing, setEditing] = useState(false)
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+      <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 13 }}>
+          <span className="code-cell">{note.note_date}</span> — {note.profiles?.full_name || '—'}
+        </span>
+        <span className={`badge ${STATUS_BADGE[note.status]}`}>{STATUS_LABEL[note.status]}</span>
+      </div>
+      {note.non_execution_reason && (
+        <div style={{ fontSize: 13.5, marginBottom: 6 }}>
+          <strong>سبب عدم التنفيذ: </strong>{note.non_execution_reason}
+        </div>
+      )}
+      {note.installation_notes && !editing && (
+        <div style={{ fontSize: 13.5, marginBottom: 6 }}>
+          <strong>ملاحظات: </strong>{note.installation_notes}
+        </div>
+      )}
+      {editing && (
+        <textarea rows={2} style={{ width: '100%', marginBottom: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
+      )}
+      {note.status === 'pending_review' && (
+        <div className="toolbar">
+          {!editing ? (
+            <button className="btn-secondary sm" onClick={() => setEditing(true)}>تعديل الصياغة</button>
+          ) : (
+            <button className="btn-secondary sm" disabled={busy} onClick={() => { onReview(note, 'pending_review', text); setEditing(false) }}>حفظ التعديل</button>
+          )}
+          <button className="btn-ok sm" disabled={busy} onClick={() => onReview(note, 'approved', editing ? text : undefined)}>اعتماد</button>
+          <button className="btn-danger sm" disabled={busy} onClick={() => onReview(note, 'rejected', undefined)}>رفض</button>
         </div>
       )}
     </div>
