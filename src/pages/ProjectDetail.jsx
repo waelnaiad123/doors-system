@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
+import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 
 export default function ProjectDetail() {
@@ -22,11 +23,11 @@ export default function ProjectDetail() {
     setError('')
     const [projRes, typesRes, doorsRes] = await Promise.all([
       supabase.from('projects').select('*').eq('id', projectId).single(),
-      supabase.from('item_types').select('*').order('name'),
+      supabase.from('item_types').select('*').order('display_order'),
       fetchAllRows((from, to) =>
         supabase
           .from('doors')
-          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, item_types(name))')
+          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, variant, item_types(name))')
           .eq('project_id', projectId)
           .order('door_code')
           .range(from, to)
@@ -97,8 +98,8 @@ export default function ProjectDetail() {
 }
 
 // ---------------------------------------------------------------------------
-const VENT_ONLY_ITEMS = ['عدد الهواية/الشباك']
-const VENT_ALLOWED_ITEMS = ['حلق', 'عدد الهواية/الشباك']
+const VENT_ONLY_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
+const VENT_ALLOWED_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 
 function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
   const [doorCode, setDoorCode] = useState('')
@@ -557,7 +558,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     const label = nextType === 'vent_window' ? 'هواية/شباك' : 'باب عادي'
     const itemCount = (door.door_items || []).length
     const warning = itemCount > 0
-      ? `تحويل "${door.door_code}" إلى ${label} هيمسح كل بنوده الحالية (${itemCount} بند) وأي تركيبات مسجلة عليها نهائيًا${nextType === 'vent_window' ? '، وهيضيف بدلها بند "حلق" وبند "عدد الهواية/الشباك" بكمية 1 لكل منهما (تقدر تعدّل الكمية بعدين من الإضافة اليدوية)' : ''}. متأكد؟`
+      ? `تحويل "${door.door_code}" إلى ${label} هيمسح كل بنوده الحالية (${itemCount} بند) وأي تركيبات مسجلة عليها نهائيًا${nextType === 'vent_window' ? '، وهيضيف بدلها بند "حلق هواية/شباك" وبند "عدد الهوايات" بكمية 1 لكل منهما (تقدر تعدّل كمية عدد الهوايات بعدين حسب العدد الفعلي)' : ''}. متأكد؟`
       : `تحويل "${door.door_code}" إلى ${label}؟`
     if (!window.confirm(warning)) return
     setBusyId(door.id)
@@ -570,8 +571,8 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
       if (error) throw error
 
       if (nextType === 'vent_window') {
-        const frameType = itemTypes.find((t) => t.name === 'حلق')
-        const countType = itemTypes.find((t) => t.name === 'عدد الهواية/الشباك')
+        const frameType = itemTypes.find((t) => t.name === 'حلق هواية/شباك')
+        const countType = itemTypes.find((t) => t.name === 'عدد الهوايات')
         const newItems = [frameType, countType]
           .filter(Boolean)
           .map((t) => ({ door_id: door.id, item_type_id: t.id, quantity: 1 }))
@@ -579,6 +580,31 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
           const { error: insErr } = await supabase.from('door_items').insert(newItems)
           if (insErr) throw insErr
         }
+      }
+      onReload()
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  async function handleVariantChange(doorItem, variant) {
+    if (variant === 'sliding') {
+      const ok = window.confirm('تحويل لضلفة باب جرار هيمسح كل باقي بنود هذا الباب (غير الضلفة نفسها) نهائيًا. متأكد؟')
+      if (!ok) return
+    }
+    setBusyId(doorItem.door_id)
+    try {
+      const points = variant === 'large' ? 50 : variant === 'sliding' ? 100 : null
+      const { error } = await supabase
+        .from('door_items')
+        .update({ variant: variant === 'regular' ? null : variant, points_override: points })
+        .eq('id', doorItem.id)
+      if (error) throw error
+      if (variant === 'sliding') {
+        const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', doorItem.door_id).neq('id', doorItem.id)
+        if (delErr) throw delErr
       }
       onReload()
     } catch (e) {
@@ -606,11 +632,31 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
               </td>
               <td>{d.location || '—'}</td>
               <td>
-                {(d.door_items || []).map((it) => (
-                  <span key={it.id} className="badge badge-empty" style={{ marginInlineEnd: 4 }}>
-                    {it.item_types?.name} × {it.quantity}
-                  </span>
-                ))}
+                {sortByItemOrder(d.door_items || [], (it) => it.item_types?.name).map((it) => {
+                  const isDoorLeaf = it.item_types?.name === 'ضلفة'
+                  const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
+                  if (isDoorLeaf && profile.role === 'admin') {
+                    return (
+                      <select
+                        key={it.id}
+                        value={it.variant || 'regular'}
+                        disabled={busyId === d.id}
+                        onChange={(e) => handleVariantChange({ id: it.id, door_id: d.id }, e.target.value)}
+                        className="badge badge-empty"
+                        style={{ marginInlineEnd: 4, cursor: 'pointer', border: 'none' }}
+                      >
+                        <option value="regular">ضلفة عادية × {it.quantity}</option>
+                        <option value="large">ضلفة كبيرة × {it.quantity} (50 نقطة)</option>
+                        <option value="sliding">ضلفة جرار × {it.quantity} (100 نقطة)</option>
+                      </select>
+                    )
+                  }
+                  return (
+                    <span key={it.id} className="badge badge-empty" style={{ marginInlineEnd: 4 }}>
+                      {it.item_types?.name} × {it.quantity}{variantLabel}
+                    </span>
+                  )
+                })}
               </td>
               <td>
                 {profile.role === 'admin' && (
