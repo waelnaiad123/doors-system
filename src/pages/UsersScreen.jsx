@@ -144,7 +144,7 @@ export default function UsersScreen() {
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
-                <tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الحالة</th><th>إنشاء مشاريع</th><th>تفويض شامل</th><th></th></tr>
+                <tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الحالة</th><th>إنشاء مشاريع</th><th>تفويض شامل</th><th>مدير التركيبات</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((u) => (
@@ -189,6 +189,15 @@ export default function UsersScreen() {
                         </button>
                       )}
                       {u.role !== 'data_entry' && u.role !== 'delivery_entry' && '—'}
+                    </td>
+                    <td>
+                      <button
+                        className={u.is_installations_manager ? 'btn-ok sm' : 'btn-secondary sm'}
+                        disabled={busyId === u.id}
+                        onClick={() => updateField(u, 'is_installations_manager', !u.is_installations_manager)}
+                      >
+                        {u.is_installations_manager ? 'مفعّل ✓' : 'تفعيل'}
+                      </button>
                     </td>
                     <td>
                       <button className="btn-secondary sm" disabled={busyId === u.id} onClick={() => handleResetPassword(u)}>
