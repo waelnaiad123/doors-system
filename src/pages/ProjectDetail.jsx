@@ -8,6 +8,7 @@ import { useAuth } from '../AuthContext'
 
 export default function ProjectDetail() {
   const { projectId } = useParams()
+  const { profile } = useAuth()
   const [project, setProject] = useState(null)
   const [itemTypes, setItemTypes] = useState([])
   const [doors, setDoors] = useState([])
@@ -48,6 +49,19 @@ export default function ProjectDetail() {
     return <div className="alert alert-error">لا يمكن الوصول لهذا المشروع (غير موجود أو غير مخصص لك).</div>
   }
 
+  const [editingInfo, setEditingInfo] = useState(false)
+  const [clientNameInput, setClientNameInput] = useState('')
+
+  async function saveProjectInfo() {
+    const { error } = await supabase
+      .from('projects')
+      .update({ client_name: clientNameInput || null })
+      .eq('id', projectId)
+    if (error) { setError(error.message); return }
+    setEditingInfo(false)
+    loadAll()
+  }
+
   return (
     <div>
       <div className="toolbar" style={{ justifyContent: 'space-between' }}>
@@ -55,10 +69,32 @@ export default function ProjectDetail() {
           <Link to="/projects" style={{ fontSize: 13, color: 'var(--muted)' }}>← كل المشاريع</Link>
           <h1>{project.project_name}</h1>
           <div style={{ color: 'var(--muted)', fontSize: 13 }}>
-            <span className="code-cell">{project.project_number}</span> · {project.client_name || 'بدون عميل'} · {doors.length} باب مُضاف
+            <span className="code-cell">{project.project_number}</span> · {project.client_name || 'بدون عميل'}
+            · {doors.length} باب مُضاف
           </div>
         </div>
+        {['admin', 'data_entry'].includes(profile.role) && (
+          <button
+            className="btn-secondary sm"
+            onClick={() => {
+              setClientNameInput(project.client_name || '')
+              setEditingInfo((s) => !s)
+            }}
+          >
+            تعديل بيانات المشروع
+          </button>
+        )}
       </div>
+
+      {editingInfo && (
+        <div className="card">
+          <div className="field">
+            <label>اسم العميل</label>
+            <input value={clientNameInput} onChange={(e) => setClientNameInput(e.target.value)} style={{ width: '100%' }} />
+          </div>
+          <button className="btn-primary" onClick={saveProjectInfo}>حفظ</button>
+        </div>
+      )}
 
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
