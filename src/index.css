@@ -173,7 +173,7 @@ tr:hover td { background: var(--bg); }
     text-overflow: ellipsis;
   }
   .print-compact td {
-    font-size: 10px !important;
+    font-size: 13px !important;
     font-weight: 700;
     padding: 1px 2px !important;
     overflow: hidden;
