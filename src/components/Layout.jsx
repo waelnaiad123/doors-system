@@ -55,7 +55,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      <nav className="sidebar">
+      <nav className="sidebar no-print">
         <div className="brand">
           متابعة الأبواب
           <small>{ROLES[profile?.role] || ''}</small>
@@ -71,7 +71,7 @@ export default function Layout() {
         </div>
       </nav>
       <main className="main">
-        <ReminderBanner />
+        <div className="no-print"><ReminderBanner /></div>
         <Outlet />
       </main>
     </div>
