@@ -552,6 +552,57 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 function DoorsList({ doors, itemTypes, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(new Set())
+
+  const filteredDoors = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return doors
+    return doors.filter((d) =>
+      d.door_code.toLowerCase().includes(q) || (d.location || '').toLowerCase().includes(q)
+    )
+  }, [doors, search])
+
+  const allVisibleSelected = filteredDoors.length > 0 && filteredDoors.every((d) => selected.has(d.id))
+
+  function toggleSelectAll(checked) {
+    setSelected((s) => {
+      const n = new Set(s)
+      filteredDoors.forEach((d) => (checked ? n.add(d.id) : n.delete(d.id)))
+      return n
+    })
+  }
+
+  function toggleSelectOne(id, checked) {
+    setSelected((s) => {
+      const n = new Set(s)
+      checked ? n.add(id) : n.delete(id)
+      return n
+    })
+  }
+
+  async function performToggleType(door, nextType) {
+    const itemCount = (door.door_items || []).length
+    if (itemCount > 0) {
+      const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', door.id)
+      if (delErr) throw delErr
+    }
+    const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
+    if (error) throw error
+
+    if (nextType === 'vent_window') {
+      const frameType = itemTypes.find((t) => t.name === 'حلق هواية/شباك')
+      const countType = itemTypes.find((t) => t.name === 'عدد الهوايات')
+      const newItems = [frameType, countType]
+        .filter(Boolean)
+        .map((t) => ({ door_id: door.id, item_type_id: t.id, quantity: 1 }))
+      if (newItems.length > 0) {
+        const { error: insErr } = await supabase.from('door_items').insert(newItems)
+        if (insErr) throw insErr
+      }
+    }
+  }
 
   async function toggleType(door) {
     const nextType = door.door_type === 'vent_window' ? 'door' : 'vent_window'
@@ -563,29 +614,59 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     if (!window.confirm(warning)) return
     setBusyId(door.id)
     try {
-      if (itemCount > 0) {
-        const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', door.id)
-        if (delErr) throw delErr
-      }
-      const { error } = await supabase.from('doors').update({ door_type: nextType }).eq('id', door.id)
-      if (error) throw error
-
-      if (nextType === 'vent_window') {
-        const frameType = itemTypes.find((t) => t.name === 'حلق هواية/شباك')
-        const countType = itemTypes.find((t) => t.name === 'عدد الهوايات')
-        const newItems = [frameType, countType]
-          .filter(Boolean)
-          .map((t) => ({ door_id: door.id, item_type_id: t.id, quantity: 1 }))
-        if (newItems.length > 0) {
-          const { error: insErr } = await supabase.from('door_items').insert(newItems)
-          if (insErr) throw insErr
-        }
-      }
+      await performToggleType(door, nextType)
       onReload()
     } catch (e) {
       onError(e.message)
     } finally {
       setBusyId('')
+    }
+  }
+
+  async function bulkToggleType(nextType) {
+    const targets = filteredDoors.filter((d) => selected.has(d.id))
+    if (targets.length === 0) return
+    const label = nextType === 'vent_window' ? 'هواية/شباك' : 'باب عادي'
+    const ok = window.confirm(
+      `تحويل ${targets.length} باب إلى ${label} هيمسح كل بنودهم الحالية وأي تركيبات مسجلة عليها نهائيًا. متأكد؟`
+    )
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      for (const door of targets) {
+        await performToggleType(door, nextType)
+      }
+      onReload()
+      setSelected(new Set())
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function bulkVariantChange(variant) {
+    const targets = filteredDoors.filter((d) => selected.has(d.id))
+    const doorLeafItems = targets
+      .map((d) => (d.door_items || []).find((it) => it.item_types?.name === 'ضلفة'))
+      .filter(Boolean)
+    if (doorLeafItems.length === 0) { onError('مفيش بند "ضلفة" في أي من الأبواب المحددة.'); return }
+    const label = variant === 'large' ? 'ضلفة كبيرة' : variant === 'sliding' ? 'ضلفة جرار' : 'ضلفة عادية'
+    const ok = window.confirm(
+      `تعديل ${doorLeafItems.length} بند ضلفة إلى "${label}"${variant === 'sliding' ? '، وده هيمسح باقي بنود كل باب من الأبواب دي (غير الضلفة نفسها)' : ''}. متأكد؟`
+    )
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      for (const it of doorLeafItems) {
+        await performVariantChange(it, variant)
+      }
+      onReload()
+      setSelected(new Set())
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBulkBusy(false)
     }
   }
 
@@ -597,6 +678,19 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     onReload()
   }
 
+  async function performVariantChange(doorItem, variant) {
+    const points = variant === 'large' ? 50 : variant === 'sliding' ? 100 : null
+    const { error } = await supabase
+      .from('door_items')
+      .update({ variant: variant === 'regular' ? null : variant, points_override: points })
+      .eq('id', doorItem.id)
+    if (error) throw error
+    if (variant === 'sliding') {
+      const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', doorItem.door_id).neq('id', doorItem.id)
+      if (delErr) throw delErr
+    }
+  }
+
   async function handleVariantChange(doorItem, variant) {
     if (variant === 'sliding') {
       const ok = window.confirm('تحويل لضلفة باب جرار هيمسح كل باقي بنود هذا الباب (غير الضلفة نفسها) نهائيًا. متأكد؟')
@@ -604,16 +698,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     }
     setBusyId(doorItem.door_id)
     try {
-      const points = variant === 'large' ? 50 : variant === 'sliding' ? 100 : null
-      const { error } = await supabase
-        .from('door_items')
-        .update({ variant: variant === 'regular' ? null : variant, points_override: points })
-        .eq('id', doorItem.id)
-      if (error) throw error
-      if (variant === 'sliding') {
-        const { error: delErr } = await supabase.from('door_items').delete().eq('door_id', doorItem.door_id).neq('id', doorItem.id)
-        if (delErr) throw delErr
-      }
+      await performVariantChange(doorItem, variant)
       onReload()
     } catch (e) {
       onError(e.message)
@@ -625,13 +710,33 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   if (doors.length === 0) {
     return <div className="empty-state"><div className="icon">🚪</div>لا توجد أبواب مُضافة بعد.</div>
   }
+  const canBulkEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
   return (
     <div className="card">
+      <div className="field">
+        <label>ابحث عن كود باب أو موقع</label>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="مثال: Basement أو D-101" style={{ width: '100%' }} />
+      </div>
+
       <table>
-        <thead><tr><th>كود الباب</th><th>النوع</th><th>الموقع</th><th>البنود</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            {canBulkEdit && (
+              <th>
+                <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAll(e.target.checked)} />
+              </th>
+            )}
+            <th>كود الباب</th><th>النوع</th><th>الموقع</th><th>البنود</th><th></th>
+          </tr>
+        </thead>
         <tbody>
-          {doors.map((d) => (
+          {filteredDoors.map((d) => (
             <tr key={d.id}>
+              {canBulkEdit && (
+                <td>
+                  <input type="checkbox" checked={selected.has(d.id)} onChange={(e) => toggleSelectOne(d.id, e.target.checked)} />
+                </td>
+              )}
               <td className="code-cell">{d.door_code}</td>
               <td>
                 <span className={d.door_type === 'vent_window' ? 'badge badge-pending' : 'badge badge-empty'}>
@@ -691,6 +796,35 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
           ))}
         </tbody>
       </table>
+
+      {filteredDoors.length === 0 && (
+        <div className="empty-state"><div className="icon">🔍</div>مفيش أبواب مطابقة للبحث.</div>
+      )}
+
+      {canBulkEdit && selected.size > 0 && (
+        <div className="sticky-action-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>تم اختيار {selected.size} باب</span>
+          <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('vent_window')}>
+            تحويل الكل لهواية/شباك
+          </button>
+          <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('door')}>
+            تحويل الكل لباب عادي
+          </button>
+          {profile.role === 'admin' && (
+            <>
+              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('large')}>
+                الضلفة كبيرة للكل
+              </button>
+              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('sliding')}>
+                الضلفة جرار للكل
+              </button>
+            </>
+          )}
+          <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => setSelected(new Set())}>
+            إلغاء التحديد
+          </button>
+        </div>
+      )}
     </div>
   )
 }
