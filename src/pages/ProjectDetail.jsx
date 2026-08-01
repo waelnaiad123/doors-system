@@ -553,16 +553,25 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
-  const [search, setSearch] = useState('')
+  const [orderFilter, setOrderFilter] = useState('')
+  const [floorFilter, setFloorFilter] = useState('')
+  const [doorNoFilter, setDoorNoFilter] = useState('')
   const [selected, setSelected] = useState(new Set())
 
   const filteredDoors = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return doors
-    return doors.filter((d) =>
-      d.door_code.toLowerCase().includes(q) || (d.location || '').toLowerCase().includes(q)
-    )
-  }, [doors, search])
+    const o = orderFilter.trim().toLowerCase()
+    const f = floorFilter.trim().toLowerCase()
+    const n = doorNoFilter.trim().toLowerCase()
+    if (!o && !f && !n) return doors
+    return doors.filter((d) => {
+      const code = d.door_code.toLowerCase()
+      const loc = (d.location || '').toLowerCase()
+      if (o && !code.includes(o)) return false
+      if (f && !code.includes(f) && !loc.includes(f)) return false
+      if (n && !code.includes(n)) return false
+      return true
+    })
+  }, [doors, orderFilter, floorFilter, doorNoFilter])
 
   const allVisibleSelected = filteredDoors.length > 0 && filteredDoors.every((d) => selected.has(d.id))
 
@@ -713,10 +722,25 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   const canBulkEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
   return (
     <div className="card">
-      <div className="field">
-        <label>ابحث عن كود باب أو موقع</label>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="مثال: Basement أو D-101" style={{ width: '100%' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 4 }}>
+        <div className="field">
+          <label>رقم الأوردر</label>
+          <input value={orderFilter} onChange={(e) => setOrderFilter(e.target.value)} placeholder="مثال: 01" style={{ width: '100%' }} />
+        </div>
+        <div className="field">
+          <label>الدور</label>
+          <input value={floorFilter} onChange={(e) => setFloorFilter(e.target.value)} placeholder="مثال: First Floor" style={{ width: '100%' }} />
+        </div>
+        <div className="field">
+          <label>رقم الباب</label>
+          <input value={doorNoFilter} onChange={(e) => setDoorNoFilter(e.target.value)} placeholder="مثال: 18" style={{ width: '100%' }} />
+        </div>
       </div>
+      {(orderFilter || floorFilter || doorNoFilter) && (
+        <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 10 }}>
+          {filteredDoors.length} باب مطابق من إجمالي {doors.length}
+        </p>
+      )}
 
       <table>
         <thead>
