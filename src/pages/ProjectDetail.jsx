@@ -589,6 +589,14 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     }
   }
 
+  async function handleQuantityChange(doorItemId, newQty) {
+    const q = Number(newQty)
+    if (!Number.isFinite(q) || q < 1) return
+    const { error } = await supabase.from('door_items').update({ quantity: q }).eq('id', doorItemId)
+    if (error) { onError(error.message); return }
+    onReload()
+  }
+
   async function handleVariantChange(doorItem, variant) {
     if (variant === 'sliding') {
       const ok = window.confirm('تحويل لضلفة باب جرار هيمسح كل باقي بنود هذا الباب (غير الضلفة نفسها) نهائيًا. متأكد؟')
@@ -634,6 +642,8 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
               <td>
                 {sortByItemOrder(d.door_items || [], (it) => it.item_types?.name).map((it) => {
                   const isDoorLeaf = it.item_types?.name === 'ضلفة'
+                  const isVentCount = it.item_types?.name === 'عدد الهوايات'
+                  const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
                   if (isDoorLeaf && profile.role === 'admin') {
                     return (
@@ -649,6 +659,18 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
                         <option value="large">ضلفة كبيرة × {it.quantity} (50 نقطة)</option>
                         <option value="sliding">ضلفة جرار × {it.quantity} (100 نقطة)</option>
                       </select>
+                    )
+                  }
+                  if (isVentCount && canEdit) {
+                    return (
+                      <span key={it.id} className="badge badge-empty" style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        عدد الهوايات ×
+                        <input
+                          type="number" min={1} defaultValue={it.quantity}
+                          onBlur={(e) => { if (Number(e.target.value) !== it.quantity) handleQuantityChange(it.id, e.target.value) }}
+                          style={{ width: 44, border: 'none', background: 'transparent', textAlign: 'center', fontWeight: 700 }}
+                        />
+                      </span>
                     )
                   }
                   return (
