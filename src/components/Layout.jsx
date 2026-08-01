@@ -15,6 +15,7 @@ const NAV_BY_ROLE = {
     { to: '/delivery', label: 'التسليمات' },
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
+    { to: '/installation-card', label: 'كارت متابعة تركيبات' },
   ],
   data_entry: [
     { to: '/projects', label: 'المشاريع' },
@@ -31,6 +32,7 @@ const NAV_BY_ROLE = {
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
+    { to: '/installation-card', label: 'كارت متابعة تركيبات' },
   ],
   engineer: [
     { to: '/projects', label: 'المشاريع' },
@@ -39,6 +41,7 @@ const NAV_BY_ROLE = {
     { to: '/approval', label: 'اعتماد الإدخالات' },
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
+    { to: '/installation-card', label: 'كارت متابعة تركيبات' },
   ],
   delivery_entry: [
     { to: '/delivery', label: 'التسليمات' },
