@@ -299,13 +299,7 @@ export default function InstallationCard() {
             </div>
           </div>
 
-          <div className="card">
-            <div style={{ display: 'flex', gap: 20, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span className="badge badge-ok">عدد نقاط المشروع: {projectPointsTotal}</span>
-              <span className="badge badge-pending">النقاط المنفذة خلال المدة: {periodTotals.points}</span>
-              <span className="badge badge-empty">عدد أيام العمل خلال المدة: {workedDaysCount}</span>
-            </div>
-
+          <div className="card print-compact">
             <div style={{ overflowX: 'auto' }}>
               <table style={{ fontSize: 12 }}>
                 <thead>
