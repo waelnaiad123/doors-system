@@ -1,16 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
+import { sortByItemOrder, variantNoteFrom } from '../lib/itemOrder'
 
-function aggregateBy(records, keyFn) {
+function aggregateBy(records, keyFn, variantFn) {
   const m = new Map()
   records.forEach((r) => {
     const k = keyFn(r) || '—'
-    if (!m.has(k)) m.set(k, { key: k, quantity: 0, points: 0, count: 0 })
+    if (!m.has(k)) m.set(k, { key: k, quantity: 0, points: 0, count: 0, variants: {} })
     const row = m.get(k)
     row.quantity += Number(r.quantity) || 0
     row.points += Number(r.points_earned) || 0
     row.count += 1
+    if (variantFn) {
+      const v = variantFn(r)
+      if (v) row.variants[v] = (row.variants[v] || 0) + (Number(r.quantity) || 0)
+    }
   })
   return Array.from(m.values()).sort((a, b) => b.quantity - a.quantity)
 }
@@ -115,7 +120,7 @@ export default function ReportsScreen() {
     }
   }
 
-  const installByItem = useMemo(() => aggregateBy(installRecords, (r) => r.item_type), [installRecords])
+  const installByItem = useMemo(() => sortByItemOrder(aggregateBy(installRecords, (r) => r.item_type, (r) => r.variant), (row) => row.key), [installRecords])
   const installByProject = useMemo(() => aggregateBy(installRecords, (r) => r.project_name), [installRecords])
   const installByPerson = useMemo(() => aggregateBy(installRecords, (r) => r.technician_name), [installRecords])
   const installTotals = useMemo(() => ({
@@ -123,12 +128,13 @@ export default function ReportsScreen() {
     points: installRecords.reduce((s, r) => s + (Number(r.points_earned) || 0), 0),
   }), [installRecords])
 
-  const deliveryByItem = useMemo(() => aggregateBy(deliveryRecords, (r) => r.item_type), [deliveryRecords])
+  const deliveryByItem = useMemo(() => sortByItemOrder(aggregateBy(deliveryRecords, (r) => r.item_type, (r) => r.variant), (row) => row.key), [deliveryRecords])
   const deliveryByProject = useMemo(() => aggregateBy(deliveryRecords, (r) => r.project_name), [deliveryRecords])
+  const deliveryByPerson = useMemo(() => aggregateBy(deliveryRecords, (r) => r.delivered_by_name), [deliveryRecords])
   const deliveryByType = useMemo(() => aggregateBy(deliveryRecords, (r) => r.delivery_type === 'client' ? 'تسليم للعميل' : 'تسليم للاستشاري'), [deliveryRecords])
 
   const installGrouped = groupBy === 'project' ? installByProject : groupBy === 'person' ? installByPerson : installByItem
-  const deliveryGrouped = groupBy === 'project' ? deliveryByProject : deliveryByType
+  const deliveryGrouped = groupBy === 'project' ? deliveryByProject : groupBy === 'person' ? deliveryByPerson : deliveryByItem
 
   return (
     <div>
@@ -225,7 +231,7 @@ export default function ReportsScreen() {
                   <thead><tr><th></th><th>الكمية</th><th>النقاط</th></tr></thead>
                   <tbody>
                     {installGrouped.map((row) => (
-                      <tr key={row.key}><td>{row.key}</td><td>{row.quantity}</td><td>{row.points}</td></tr>
+                      <tr key={row.key}><td>{row.key}</td><td>{row.quantity}{variantNoteFrom(row.variants)}</td><td>{row.points}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -239,6 +245,11 @@ export default function ReportsScreen() {
                 <h2>ملخص التسليمات</h2>
                 <span className="badge badge-ok">{deliveryRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0)} قطعة</span>
               </div>
+              {deliveryByType.length > 0 && (
+                <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 8 }}>
+                  {deliveryByType.map((t) => `${t.key}: ${t.quantity}`).join(' — ')}
+                </p>
+              )}
               {deliveryGrouped.length === 0 ? (
                 <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>لا توجد بيانات مطابقة لهذا الفلتر.</p>
               ) : (
@@ -246,7 +257,7 @@ export default function ReportsScreen() {
                   <thead><tr><th></th><th>الكمية</th></tr></thead>
                   <tbody>
                     {deliveryGrouped.map((row) => (
-                      <tr key={row.key}><td>{row.key}</td><td>{row.quantity}</td></tr>
+                      <tr key={row.key}><td>{row.key}</td><td>{row.quantity}{variantNoteFrom(row.variants)}</td></tr>
                     ))}
                   </tbody>
                 </table>
