@@ -174,7 +174,7 @@ tr:hover td { background: var(--bg); }
   }
   .print-compact td {
     font-size: 11px !important;
-    font-weight: 700;
+    font-weight: 400;
     padding: 1px 2px !important;
     overflow: hidden;
     text-overflow: ellipsis;
