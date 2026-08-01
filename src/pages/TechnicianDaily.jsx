@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
+import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 
 function todayStr() {
@@ -16,6 +17,7 @@ export default function TechnicianDaily() {
   const [search, setSearch] = useState('')
   const [pending, setPending] = useState([])
   const [selected, setSelected] = useState(new Set())
+  const [workDate, setWorkDate] = useState(todayStr())
   const [today, setToday] = useState([])
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingPending, setLoadingPending] = useState(false)
@@ -120,7 +122,7 @@ export default function TechnicianDaily() {
       if (!m.has(it.door_code)) m.set(it.door_code, { door_code: it.door_code, location: it.location, items: [] })
       m.get(it.door_code).items.push(it)
     })
-    return Array.from(m.values())
+    return Array.from(m.values()).map((d) => ({ ...d, items: sortByItemOrder(d.items, (it) => it.item_type) }))
   }, [pending])
 
   const MAX_DOORS_SHOWN = 100
@@ -157,15 +159,17 @@ export default function TechnicianDaily() {
 
   async function handleSubmit() {
     if (selected.size === 0) return
+    if (!workDate) { setError('اختر تاريخ التركيب الفعلي الأول'); return }
+    if (workDate > todayStr()) { setError('تاريخ التركيب لا يمكن أن يكون في المستقبل'); return }
     setSubmitting(true)
     setError('')
     try {
       const rows = Array.from(selected).map((id) => ({
-        door_item_id: id, technician_id: profile.id, installed_at: todayStr(), status: 'pending_review',
+        door_item_id: id, technician_id: profile.id, installed_at: workDate, status: 'pending_review',
       }))
       const { error } = await supabase.from('installation_records').insert(rows)
       if (error) throw error
-      setNotice(`تم تسجيل ${rows.length} بند بنجاح، بانتظار اعتماد المشرف.`)
+      setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد المشرف.`)
       await Promise.all([loadPending(), loadToday(), loadWorkforceReminder()])
     } catch (e) {
       setError(e.message)
@@ -226,6 +230,18 @@ export default function TechnicianDaily() {
             </optgroup>
           </select>
         </div>
+
+        {projectId && (
+          <div className="field">
+            <label>تاريخ التركيب الفعلي</label>
+            <input type="date" value={workDate} max={todayStr()} onChange={(e) => setWorkDate(e.target.value)} />
+            {workDate !== todayStr() && (
+              <p style={{ fontSize: 12, color: 'var(--pending)', marginTop: 4 }}>
+                ⚠️ بتسجّل تركيب بتاريخ سابق ({workDate})، مش النهاردة.
+              </p>
+            )}
+          </div>
+        )}
 
         {projectId && (
           <div className="field">
