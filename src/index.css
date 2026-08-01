@@ -164,8 +164,17 @@ tr:hover td { background: var(--bg); }
 
   .print-compact { overflow: visible !important; }
   .print-compact > div { overflow: visible !important; width: 100% !important; }
-  .print-compact table { font-size: 7px !important; table-layout: fixed; width: 100%; }
-  .print-compact th, .print-compact td {
+  .print-compact table { table-layout: fixed; width: 100%; }
+  .print-compact th {
+    font-size: 6px !important;
+    padding: 1px !important;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .print-compact td {
+    font-size: 10px !important;
+    font-weight: 700;
     padding: 1px 2px !important;
     overflow: hidden;
     text-overflow: ellipsis;
