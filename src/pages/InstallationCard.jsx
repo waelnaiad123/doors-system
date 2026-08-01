@@ -320,7 +320,7 @@ export default function InstallationCard() {
                   </tr>
                   {dailyData.map((day) => (
                     <tr key={day.date}>
-                      <td className="code-cell">{day.date}</td>
+                      <td className="code-cell">{day.date.slice(8, 10)}/{day.date.slice(5, 7)}</td>
                       <td>{day.headcount}</td>
                       <td>{day.executedPoints || ''}</td>
                       <td>{day.plannedPoints}</td>
