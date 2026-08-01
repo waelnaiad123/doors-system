@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
+import { sortByItemOrder, itemOrderIndex, variantNoteFrom } from '../lib/itemOrder'
 
 export default function ProjectStatusReport() {
   const [projects, setProjects] = useState([])
@@ -45,12 +46,12 @@ export default function ProjectStatusReport() {
   }
 
   const itemTypes = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.item_type))).sort((a, b) => a.localeCompare(b, 'ar'))
+    return Array.from(new Set(rows.map((r) => r.item_type))).sort((a, b) => itemOrderIndex(a) - itemOrderIndex(b))
   }, [rows])
 
   const summary = useMemo(() => {
     const m = new Map()
-    itemTypes.forEach((t) => m.set(t, { total: 0, installed: 0, client: 0, consultant: 0 }))
+    itemTypes.forEach((t) => m.set(t, { total: 0, installed: 0, client: 0, consultant: 0, variants: {} }))
     rows.forEach((r) => {
       const s = m.get(r.item_type)
       const q = Number(r.quantity) || 0
@@ -58,9 +59,24 @@ export default function ProjectStatusReport() {
       if (r.installed) s.installed += q
       if (r.client_delivered) s.client += q
       if (r.consultant_delivered) s.consultant += q
+      if (r.variant) {
+        if (!s.variants[r.variant]) s.variants[r.variant] = { total: 0, installed: 0, client: 0, consultant: 0 }
+        const v = s.variants[r.variant]
+        v.total += q
+        if (r.installed) v.installed += q
+        if (r.client_delivered) v.client += q
+        if (r.consultant_delivered) v.consultant += q
+      }
     })
     return m
   }, [rows, itemTypes])
+
+  function noteFor(t, metric) {
+    const variants = summary.get(t).variants
+    const map = {}
+    Object.entries(variants).forEach(([v, counts]) => { map[v] = counts[metric] })
+    return variantNoteFrom(map)
+  }
 
   const doorsGrouped = useMemo(() => {
     const m = new Map()
@@ -68,7 +84,7 @@ export default function ProjectStatusReport() {
       if (!m.has(r.door_code)) m.set(r.door_code, { door_code: r.door_code, door_type: r.door_type, location: r.location, items: [] })
       m.get(r.door_code).items.push(r)
     })
-    return Array.from(m.values())
+    return Array.from(m.values()).map((d) => ({ ...d, items: sortByItemOrder(d.items, (it) => it.item_type) }))
   }, [rows])
 
   return (
@@ -117,19 +133,19 @@ export default function ProjectStatusReport() {
                 <tbody>
                   <tr>
                     <td><strong>الإجمالي</strong></td>
-                    {itemTypes.map((t) => <td key={t}>{summary.get(t).total}</td>)}
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).total}{noteFor(t, 'total')}</td>)}
                   </tr>
                   <tr>
                     <td><strong>تركيب معتمد</strong></td>
-                    {itemTypes.map((t) => <td key={t}>{summary.get(t).installed}</td>)}
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).installed}{noteFor(t, 'installed')}</td>)}
                   </tr>
                   <tr>
                     <td><strong>تسليم للعميل</strong></td>
-                    {itemTypes.map((t) => <td key={t}>{summary.get(t).client}</td>)}
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).client}{noteFor(t, 'client')}</td>)}
                   </tr>
                   <tr>
                     <td><strong>تسليم للاستشاري</strong></td>
-                    {itemTypes.map((t) => <td key={t}>{summary.get(t).consultant}</td>)}
+                    {itemTypes.map((t) => <td key={t}>{summary.get(t).consultant}{noteFor(t, 'consultant')}</td>)}
                   </tr>
                 </tbody>
               </table>
@@ -159,7 +175,7 @@ export default function ProjectStatusReport() {
                           const cls = c === 'green' ? 'badge-status-green' : c === 'blue' ? 'badge-status-blue' : c === 'yellow' ? 'badge-status-yellow' : 'badge-empty'
                           return (
                             <span key={it.door_item_id} className={`badge ${cls}`}>
-                              {it.item_type} × {it.quantity}
+                              {it.item_type} × {it.quantity}{it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''}
                             </span>
                           )
                         })}
