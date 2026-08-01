@@ -156,10 +156,13 @@ tr:hover td { background: var(--bg); }
 
 @media print {
   .no-print { display: none !important; }
-  .main, .card { box-shadow: none !important; border: none !important; padding: 0 !important; }
+  .main, .card { box-shadow: none !important; border: none !important; padding: 4px !important; margin-bottom: 4px !important; }
   body { background: #fff !important; }
   table { font-size: 11px; }
-  @page { size: landscape; margin: 12mm; }
+  h1, h2, h3 { margin: 2px 0 !important; font-size: 14px !important; }
+  .print-compact table { font-size: 8px !important; }
+  .print-compact th, .print-compact td { padding: 1px 3px !important; white-space: nowrap; }
+  @page { size: landscape; margin: 6mm; }
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
