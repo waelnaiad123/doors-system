@@ -16,6 +16,8 @@ export default function ProjectDetail() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [tab, setTab] = useState('manual')
+  const [editingInfo, setEditingInfo] = useState(false)
+  const [clientNameInput, setClientNameInput] = useState('')
 
   useEffect(() => { loadAll() }, [projectId]) // eslint-disable-line
 
@@ -48,9 +50,6 @@ export default function ProjectDetail() {
   if (!project) {
     return <div className="alert alert-error">لا يمكن الوصول لهذا المشروع (غير موجود أو غير مخصص لك).</div>
   }
-
-  const [editingInfo, setEditingInfo] = useState(false)
-  const [clientNameInput, setClientNameInput] = useState('')
 
   async function saveProjectInfo() {
     const { error } = await supabase
