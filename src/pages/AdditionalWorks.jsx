@@ -15,6 +15,10 @@ export default function AdditionalWorks() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const isCurrentOrPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month <= today.getMonth() + 1)
+  const isThisExactMonth = year === today.getFullYear() && month === today.getMonth() + 1
+  const canEdit = isCurrentOrPastMonth && (!isThisExactMonth || today.getDate() >= 21)
+
   useEffect(() => { loadProjects() }, [])
   useEffect(() => { if (projects.length > 0) loadRows() }, [year, month, projects]) // eslint-disable-line
 
@@ -40,6 +44,7 @@ export default function AdditionalWorks() {
   }
 
   async function saveRow(projectId, field, value) {
+    if (!canEdit) return
     const num = Number(value)
     if (!Number.isFinite(num) || num < 0) return
     setError(''); setNotice('')
@@ -70,7 +75,7 @@ export default function AdditionalWorks() {
   )
 
   function addProject() {
-    if (!addProjectId) return
+    if (!canEdit || !addProjectId) return
     setRows((r) => ({ ...r, [addProjectId]: { factory_storage: 0, install_storage: 0, factory_repairs: 0, other_points: 0 } }))
     setAddProjectId('')
   }
@@ -80,6 +85,11 @@ export default function AdditionalWorks() {
       <h1>بيان الأعمال الإضافية</h1>
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
+      {!canEdit && isThisExactMonth && (
+        <div className="alert" style={{ background: 'var(--pending-soft)', color: 'var(--pending)' }}>
+          بيان هذا الشهر بيتفتح للتسجيل يوم 21 فقط. النهاردة يوم {today.getDate()}.
+        </div>
+      )}
 
       <div className="card">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
@@ -100,13 +110,13 @@ export default function AdditionalWorks() {
         <div className="field">
           <label>إضافة مشروع للبيان</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <select value={addProjectId} onChange={(e) => setAddProjectId(e.target.value)} style={{ flex: 1 }}>
+            <select value={addProjectId} onChange={(e) => setAddProjectId(e.target.value)} style={{ flex: 1 }} disabled={!canEdit}>
               <option value="">-- اختر مشروعًا --</option>
               {availableToAdd.map((p) => (
                 <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
               ))}
             </select>
-            <button className="btn-primary" onClick={addProject} disabled={!addProjectId}>إضافة</button>
+            <button className="btn-primary" onClick={addProject} disabled={!canEdit || !addProjectId}>إضافة</button>
           </div>
         </div>
       </div>
@@ -134,7 +144,7 @@ export default function AdditionalWorks() {
                       {['factory_storage', 'install_storage', 'factory_repairs', 'other_points'].map((field) => (
                         <td key={field}>
                           <input
-                            type="number" min={0} defaultValue={r[field] || 0}
+                            type="number" min={0} defaultValue={r[field] || 0} disabled={!canEdit}
                             onBlur={(e) => { if (Number(e.target.value) !== (r[field] || 0)) saveRow(p.id, field, e.target.value) }}
                             style={{ width: 70 }}
                           />
