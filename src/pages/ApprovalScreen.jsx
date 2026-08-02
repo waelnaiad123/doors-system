@@ -110,7 +110,7 @@ export default function ApprovalScreen() {
 
   async function loadNotes() {
     const { data, error } = await supabase
-      .from('daily_project_notes').select('*, profiles!daily_project_notes_created_by_fkey(full_name)')
+      .from('daily_project_notes').select('*, profiles!daily_project_notes_created_by_fkey(full_name, role)')
       .eq('project_id', projectId).order('note_date', { ascending: false })
     if (!error) setNotes(data || [])
   }
@@ -420,7 +420,7 @@ export default function ApprovalScreen() {
         <div className="card">
           <h2 style={{ marginBottom: 10 }}>ملاحظات وأسباب عدم التنفيذ اليومية</h2>
           {notes.map((n) => (
-            <NoteRow key={n.id} note={n} busy={busy} onReview={reviewNote} />
+            <NoteRow key={n.id} note={n} busy={busy} onReview={reviewNote} currentUserId={profile.id} />
           ))}
         </div>
       )}
@@ -446,9 +446,17 @@ export default function ApprovalScreen() {
   )
 }
 
-function NoteRow({ note, busy, onReview }) {
+function NoteRow({ note, busy, onReview, currentUserId }) {
   const [text, setText] = useState(note.installation_notes || '')
   const [editing, setEditing] = useState(false)
+  const isOwnNote = note.created_by === currentUserId
+
+  function statusLabel() {
+    if (note.status === 'pending_review') {
+      return note.profiles?.role === 'supervisor' ? 'بانتظار اعتماد المهندس' : 'بانتظار اعتماد المشرف أو المهندس'
+    }
+    return STATUS_LABEL[note.status]
+  }
 
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
@@ -456,7 +464,7 @@ function NoteRow({ note, busy, onReview }) {
         <span style={{ fontSize: 13 }}>
           <span className="code-cell">{note.note_date}</span> — {note.profiles?.full_name || '—'}
         </span>
-        <span className={`badge ${STATUS_BADGE[note.status]}`}>{STATUS_LABEL[note.status]}</span>
+        <span className={`badge ${STATUS_BADGE[note.status]}`}>{statusLabel()}</span>
       </div>
       {note.non_execution_reason && (
         <div style={{ fontSize: 13.5, marginBottom: 6 }}>
@@ -471,7 +479,7 @@ function NoteRow({ note, busy, onReview }) {
       {editing && (
         <textarea rows={2} style={{ width: '100%', marginBottom: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
       )}
-      {note.status === 'pending_review' && (
+      {note.status === 'pending_review' && !isOwnNote && (
         <div className="toolbar">
           {!editing ? (
             <button className="btn-secondary sm" onClick={() => setEditing(true)}>تعديل الصياغة</button>
