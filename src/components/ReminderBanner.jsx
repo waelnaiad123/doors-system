@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 
 export default function ReminderBanner() {
   const { profile } = useAuth()
+  const location = useLocation()
   const [unentered, setUnentered] = useState([])
   const [approvalsCount, setApprovalsCount] = useState(0)
   const [deliveriesCount, setDeliveriesCount] = useState(0)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => { if (profile) load() }, [profile?.id]) // eslint-disable-line
+  useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
 
   async function load() {
     try {
