@@ -46,7 +46,7 @@ export default function TechnicianDaily() {
     setWorkforceToday(data || [])
     const { data: notesData } = await supabase
       .from('daily_project_notes').select('project_id')
-      .eq('note_date', todayStr()).eq('created_by', profile.id)
+      .eq('note_date', todayStr()).in('project_id', projectIds)
     setNotesToday(notesData || [])
   }
 
