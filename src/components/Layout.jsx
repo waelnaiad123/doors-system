@@ -62,7 +62,7 @@ export default function Layout() {
       <nav className="sidebar no-print">
         <div className="brand">
           متابعة الأبواب
-          <small>{ROLES[profile?.role] || ''}</small>
+          <small>{profile?.full_name}{profile?.role ? ` — ${ROLES[profile.role]}` : ''}</small>
         </div>
         {items.map((it) => (
           <NavLink key={it.to} to={it.to} className={({ isActive }) => (isActive ? 'active' : '')}>
