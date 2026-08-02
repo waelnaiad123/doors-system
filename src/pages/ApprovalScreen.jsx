@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
+import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 import ProgressRing from '../components/ProgressRing'
 
@@ -60,6 +61,29 @@ export default function ApprovalScreen() {
       if (!m.has(r.project_id)) m.set(r.project_id, { project_id: r.project_id, project_number: r.project_number, project_name: r.project_name, count: 0 })
       m.get(r.project_id).count++
     })
+
+    // المشاريع اللي عندها ملاحظات/أسباب معلقة بس (من غير تركيبات معلقة) لازم تظهر في القائمة كمان
+    if (profile.role === 'supervisor' || profile.role === 'engineer' || profile.role === 'admin') {
+      const { data: pendingNotes } = await fetchAllRows((from, to) =>
+        supabase
+          .from('daily_project_notes')
+          .select('project_id, projects(project_number, project_name)')
+          .eq('status', 'pending_review')
+          .range(from, to)
+      )
+      ;(pendingNotes || []).forEach((n) => {
+        if (!m.has(n.project_id)) {
+          m.set(n.project_id, {
+            project_id: n.project_id,
+            project_number: n.projects?.project_number,
+            project_name: n.projects?.project_name,
+            count: 0,
+          })
+        }
+        m.get(n.project_id).count++
+      })
+    }
+
     const list = Array.from(m.values()).sort((a, b) => b.count - a.count)
     setProjectsPending(list)
     if (projectId && !list.some((p) => p.project_id === projectId)) setProjectId('')
@@ -125,7 +149,7 @@ export default function ApprovalScreen() {
       if (!m.has(r.door_code)) m.set(r.door_code, { door_code: r.door_code, items: [] })
       m.get(r.door_code).items.push(r)
     })
-    return Array.from(m.values())
+    return Array.from(m.values()).map((d) => ({ ...d, items: sortByItemOrder(d.items, (r) => r.item_type) }))
   }, [pending])
 
   function bucketOf(status) {
@@ -140,7 +164,7 @@ export default function ApprovalScreen() {
       if (!m.has(r.item_type)) m.set(r.item_type, { key: r.item_type, approved: 0, supervisor_approved: 0, pending: 0 })
       m.get(r.item_type)[bucketOf(r.status)]++
     })
-    return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key, 'ar'))
+    return sortByItemOrder(Array.from(m.values()), (row) => row.key)
   }, [records])
 
   const summaryByDoor = useMemo(() => {
