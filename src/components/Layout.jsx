@@ -16,6 +16,8 @@ const NAV_BY_ROLE = {
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
+    { to: '/additional-works', label: 'بيان الأعمال الإضافية' },
+    { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
   ],
   data_entry: [
     { to: '/projects', label: 'المشاريع' },
@@ -42,6 +44,8 @@ const NAV_BY_ROLE = {
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
+    { to: '/additional-works', label: 'بيان الأعمال الإضافية' },
+    { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
   ],
   delivery_entry: [
     { to: '/delivery', label: 'التسليمات' },
