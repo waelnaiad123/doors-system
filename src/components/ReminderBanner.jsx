@@ -10,6 +10,7 @@ export default function ReminderBanner() {
   const [unentered, setUnentered] = useState([])
   const [approvalsCount, setApprovalsCount] = useState(0)
   const [deliveriesCount, setDeliveriesCount] = useState(0)
+  const [notesCount, setNotesCount] = useState(0)
   const [ready, setReady] = useState(false)
 
   useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
@@ -32,6 +33,11 @@ export default function ReminderBanner() {
           ? rows.filter((r) => r.status === 'pending_review' && r.technician_role !== 'supervisor').length
           : rows.length
         setApprovalsCount(count)
+
+        const { data: notesData } = await fetchAllRows((from, to) =>
+          supabase.from('daily_project_notes').select('id').eq('status', 'pending_review').range(from, to)
+        )
+        setNotesCount((notesData || []).length)
       }
       if (['engineer', 'admin'].includes(profile.role)) {
         const { data } = await fetchAllRows((from, to) =>
@@ -48,7 +54,8 @@ export default function ReminderBanner() {
   const showEntry = unentered.length > 0
   const showApprovals = approvalsCount > 0
   const showDeliveries = deliveriesCount > 0
-  if (!showEntry && !showApprovals && !showDeliveries) return null
+  const showNotes = notesCount > 0
+  if (!showEntry && !showApprovals && !showDeliveries && !showNotes) return null
 
   return (
     <div className="reminder-banner">
@@ -60,6 +67,11 @@ export default function ReminderBanner() {
       {showApprovals && (
         <Link to="/approval" className="reminder-line">
           🔔 {approvalsCount} بند تركيب بانتظار اعتمادك
+        </Link>
+      )}
+      {showNotes && (
+        <Link to="/approval" className="reminder-line">
+          🔔 {notesCount} ملاحظة/سبب عدم تنفيذ بانتظار اعتمادك
         </Link>
       )}
       {showDeliveries && (
