@@ -183,6 +183,8 @@ tr:hover td { background: var(--bg); }
   .print-only { display: inline !important; }
 
   @page { size: A4 landscape; margin: 8mm; }
+  .print-a3 { page: a3page; }
+  @page a3page { size: A3 landscape; margin: 8mm; }
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
