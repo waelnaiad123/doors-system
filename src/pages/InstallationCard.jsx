@@ -97,7 +97,7 @@ export default function InstallationCard() {
       setWorkforceRows(wf || [])
 
       const { data: notes, error: e4 } = await supabase
-        .from('daily_project_notes').select('note_date, installation_notes, non_execution_reason').eq('project_id', projectId)
+        .from('daily_project_notes').select('note_date, installation_notes, non_execution_reason, status').eq('project_id', projectId)
       if (e4) throw e4
       setNotesRows(notes || [])
     } catch (e) {
@@ -194,11 +194,11 @@ export default function InstallationCard() {
   }, [totalItems, installRows])
 
   const periodNotes = useMemo(
-    () => notesRows.filter((n) => n.note_date >= start && n.note_date <= end && n.installation_notes),
+    () => notesRows.filter((n) => n.note_date >= start && n.note_date <= end && n.installation_notes && n.status === 'approved'),
     [notesRows, start, end]
   )
   const periodReasons = useMemo(
-    () => notesRows.filter((n) => n.note_date >= start && n.note_date <= end && n.non_execution_reason),
+    () => notesRows.filter((n) => n.note_date >= start && n.note_date <= end && n.non_execution_reason && n.status === 'approved'),
     [notesRows, start, end]
   )
 
