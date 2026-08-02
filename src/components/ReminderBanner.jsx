@@ -14,6 +14,11 @@ export default function ReminderBanner() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
+  useEffect(() => {
+    if (!profile) return
+    const interval = setInterval(load, 20000)
+    return () => clearInterval(interval)
+  }, [profile?.id]) // eslint-disable-line
 
   async function load() {
     try {
