@@ -15,6 +15,8 @@ import ReportsScreen from './pages/ReportsScreen'
 import WorkforceScreen from './pages/WorkforceScreen'
 import ProjectStatusReport from './pages/ProjectStatusReport'
 import InstallationCard from './pages/InstallationCard'
+import AdditionalWorks from './pages/AdditionalWorks'
+import MonthlyProductivity from './pages/MonthlyProductivity'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -83,6 +85,14 @@ export default function App() {
             <Route
               path="projects/:projectId"
               element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><ProjectDetail /></RequireRole>}
+            />
+            <Route
+              path="additional-works"
+              element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
+            />
+            <Route
+              path="monthly-productivity"
+              element={<RequireRole roles={['admin', 'engineer']}><MonthlyProductivity /></RequireRole>}
             />
             <Route
               path="installation-card"
