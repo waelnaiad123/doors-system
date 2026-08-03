@@ -9,6 +9,7 @@ const NAV_BY_ROLE = {
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المشاريع' },
     { to: '/users', label: 'المستخدمون' },
+    { to: '/backup', label: 'نسخة احتياطية' },
     { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
@@ -16,8 +17,6 @@ const NAV_BY_ROLE = {
     { to: '/project-status', label: 'موقف مشروع' },
     { to: '/reports', label: 'التقارير' },
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
-    { to: '/additional-works', label: 'بيان الأعمال الإضافية' },
-    { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
     { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين' },
   ],
   data_entry: [
@@ -47,7 +46,7 @@ const NAV_BY_ROLE = {
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
     { to: '/additional-works', label: 'بيان الأعمال الإضافية' },
     { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
-    { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين' },
+    { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين', requiresFlag: 'is_installations_manager' },
   ],
   delivery_entry: [
     { to: '/delivery', label: 'التسليمات' },
@@ -57,7 +56,7 @@ const NAV_BY_ROLE = {
 
 export default function Layout() {
   const { profile, signOut } = useAuth()
-  const items = NAV_BY_ROLE[profile?.role] || []
+  const items = (NAV_BY_ROLE[profile?.role] || []).filter((it) => !it.requiresFlag || profile?.[it.requiresFlag])
 
   return (
     <div className="app-shell">
