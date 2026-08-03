@@ -84,6 +84,30 @@ export default function UsersScreen() {
     }
   }
 
+  async function handleDeleteUser(user) {
+    const confirmText = window.prompt(
+      `هذا الإجراء نهائي ومفيش تراجع عنه. هيتم حذف حساب "${user.full_name}" بالكامل مع كل صلاحياته.\nاكتب اسمه بالظبط عشان تأكيد الحذف: ${user.full_name}`
+    )
+    if (confirmText !== user.full_name) {
+      if (confirmText !== null) setError('الاسم اللي كتبته مش مطابق، اتلغى الحذف.')
+      return
+    }
+    setBusyId(user.id)
+    setError(''); setNotice('')
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'delete_user', user_id: user.id },
+      })
+      if (error || data?.error) throw new Error(await extractFunctionError(error, data))
+      setNotice(`تم حذف حساب "${user.full_name}" نهائيًا.`)
+      await loadUsers()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId('')
+    }
+  }
+
   async function updateField(user, field, value) {
     setBusyId(user.id)
     setError('')
@@ -202,6 +226,9 @@ export default function UsersScreen() {
                     <td>
                       <button className="btn-secondary sm" disabled={busyId === u.id} onClick={() => handleResetPassword(u)}>
                         إعادة تعيين كلمة السر
+                      </button>
+                      <button className="btn-danger sm" disabled={busyId === u.id} onClick={() => handleDeleteUser(u)} style={{ marginInlineStart: 6 }}>
+                        حذف الحساب
                       </button>
                     </td>
                   </tr>
