@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import UpdatePassword from './pages/UpdatePassword'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import ComingSoon from './pages/ComingSoon'
@@ -18,6 +19,7 @@ import InstallationCard from './pages/InstallationCard'
 import AdditionalWorks from './pages/AdditionalWorks'
 import MonthlyProductivity from './pages/MonthlyProductivity'
 import AdminProductivitySummary from './pages/AdminProductivitySummary'
+import BackupExport from './pages/BackupExport'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -69,6 +71,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
           <Route
             path="/"
             element={
@@ -90,6 +93,10 @@ export default function App() {
             <Route
               path="additional-works"
               element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
+            />
+            <Route
+              path="backup"
+              element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
             />
             <Route
               path="productivity-summary"
