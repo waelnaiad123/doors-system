@@ -17,6 +17,7 @@ import ProjectStatusReport from './pages/ProjectStatusReport'
 import InstallationCard from './pages/InstallationCard'
 import AdditionalWorks from './pages/AdditionalWorks'
 import MonthlyProductivity from './pages/MonthlyProductivity'
+import AdminProductivitySummary from './pages/AdminProductivitySummary'
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/projects',
@@ -89,6 +90,10 @@ export default function App() {
             <Route
               path="additional-works"
               element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
+            />
+            <Route
+              path="productivity-summary"
+              element={<RequireRole roles={['admin', 'engineer']}><AdminProductivitySummary /></RequireRole>}
             />
             <Route
               path="monthly-productivity"
