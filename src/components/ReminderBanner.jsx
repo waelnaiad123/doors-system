@@ -11,6 +11,8 @@ export default function ReminderBanner() {
   const [approvalsCount, setApprovalsCount] = useState(0)
   const [deliveriesCount, setDeliveriesCount] = useState(0)
   const [notesCount, setNotesCount] = useState(0)
+  const [engineerOnboarding, setEngineerOnboarding] = useState([])
+  const [teamOnboarding, setTeamOnboarding] = useState([])
   const [ready, setReady] = useState(false)
 
   useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
@@ -19,6 +21,54 @@ export default function ReminderBanner() {
     const interval = setInterval(load, 20000)
     return () => clearInterval(interval)
   }, [profile?.id]) // eslint-disable-line
+
+  async function loadEngineerOnboarding() {
+    const { data: myAssigns } = await fetchAllRows((from, to) =>
+      supabase.from('project_assignments').select('project_id, projects(project_name, project_number)')
+        .eq('user_id', profile.id).eq('role', 'engineer').eq('is_active', true).range(from, to)
+    )
+    const myProjects = (myAssigns || [])
+      .filter((a) => a.projects)
+      .map((a) => ({ id: a.project_id, project_name: a.projects.project_name, project_number: a.projects.project_number }))
+    const projectIds = [...new Set(myProjects.map((p) => p.id))]
+    if (projectIds.length === 0) { setEngineerOnboarding([]); return }
+
+    const { data: doorsWithItems } = await fetchAllRows((from, to) =>
+      supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
+    )
+    const pendingProjectIds = new Set()
+    ;(doorsWithItems || []).forEach((d) => {
+      if ((d.door_items || []).some((it) => it.status === 'pending_review')) pendingProjectIds.add(d.project_id)
+    })
+
+    const { data: teamAssigns } = await supabase
+      .from('project_assignments').select('project_id, role')
+      .in('project_id', projectIds).eq('is_active', true).in('role', ['supervisor', 'delivery_entry'])
+    const hasSupervisor = new Set((teamAssigns || []).filter((t) => t.role === 'supervisor').map((t) => t.project_id))
+    const hasDelivery = new Set((teamAssigns || []).filter((t) => t.role === 'delivery_entry').map((t) => t.project_id))
+
+    setEngineerOnboarding(
+      myProjects.filter((p) => pendingProjectIds.has(p.id) || !hasSupervisor.has(p.id) || !hasDelivery.has(p.id))
+    )
+  }
+
+  async function loadTeamOnboarding() {
+    const { data: myAssigns } = await fetchAllRows((from, to) =>
+      supabase.from('project_assignments').select('project_id, projects(project_name, project_number)')
+        .eq('user_id', profile.id).eq('role', profile.role).eq('is_active', true).range(from, to)
+    )
+    const myProjects = (myAssigns || [])
+      .filter((a) => a.projects)
+      .map((a) => ({ id: a.project_id, project_name: a.projects.project_name, project_number: a.projects.project_number }))
+    const projectIds = [...new Set(myProjects.map((p) => p.id))]
+    if (projectIds.length === 0) { setTeamOnboarding([]); return }
+
+    const { data: anyInstalls } = await fetchAllRows((from, to) =>
+      supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
+    )
+    const startedProjectIds = new Set((anyInstalls || []).map((r) => r.project_id))
+    setTeamOnboarding(myProjects.filter((p) => !startedProjectIds.has(p.id)))
+  }
 
   async function load() {
     try {
@@ -50,6 +100,12 @@ export default function ReminderBanner() {
         )
         setDeliveriesCount((data || []).length)
       }
+      if (profile.role === 'engineer') {
+        await loadEngineerOnboarding()
+      }
+      if (['supervisor', 'technician'].includes(profile.role)) {
+        await loadTeamOnboarding()
+      }
     } finally {
       setReady(true)
     }
@@ -60,10 +116,22 @@ export default function ReminderBanner() {
   const showApprovals = approvalsCount > 0
   const showDeliveries = deliveriesCount > 0
   const showNotes = notesCount > 0
-  if (!showEntry && !showApprovals && !showDeliveries && !showNotes) return null
+  const showEngineerOnboarding = engineerOnboarding.length > 0
+  const showTeamOnboarding = teamOnboarding.length > 0
+  if (!showEntry && !showApprovals && !showDeliveries && !showNotes && !showEngineerOnboarding && !showTeamOnboarding) return null
 
   return (
     <div className="reminder-banner">
+      {showEngineerOnboarding && (
+        <Link to="/assignments" className="reminder-line">
+          📋 {engineerOnboarding.length} مشروع جديد مخصص لك: اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات
+        </Link>
+      )}
+      {showTeamOnboarding && (
+        <Link to={profile.role === 'supervisor' ? '/workforce' : '/technician'} className="reminder-line">
+          📋 {teamOnboarding.length} مشروع جديد مخصص لك: {profile.role === 'supervisor' ? 'ابدأ بحصر الأفراد وتسجيل التركيب' : 'ابدأ تسجيل التركيب'}
+        </Link>
+      )}
       {showEntry && (
         <Link to="/technician" className="reminder-line">
           ⚠️ {unentered.length} مشروع فيه عمال ولسه محتاج تسجيل تركيب أو ملاحظة اليوم
