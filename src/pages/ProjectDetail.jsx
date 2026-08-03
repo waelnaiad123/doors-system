@@ -30,7 +30,7 @@ export default function ProjectDetail() {
       fetchAllRows((from, to) =>
         supabase
           .from('doors')
-          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, variant, item_types(name))')
+          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, variant, status, item_types(name))')
           .eq('project_id', projectId)
           .order('door_code')
           .range(from, to)
@@ -714,6 +714,36 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     }
   }
 
+  async function bulkApproveAllPending() {
+    const pendingIds = []
+    doors.forEach((d) => (d.door_items || []).forEach((it) => { if (it.status === 'pending_review') pendingIds.push(it.id) }))
+    if (pendingIds.length === 0) return
+    const ok = window.confirm(`اعتماد ${pendingIds.length} بند معلّق في هذا المشروع؟`)
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      const { error } = await supabase
+        .from('door_items')
+        .update({ status: 'approved', reviewed_by: profile.id, reviewed_at: new Date().toISOString() })
+        .in('id', pendingIds)
+      if (error) throw error
+      onReload()
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function handleItemApproval(itemId, newStatus) {
+    const { error } = await supabase
+      .from('door_items')
+      .update({ status: newStatus, reviewed_by: profile.id, reviewed_at: new Date().toISOString() })
+      .eq('id', itemId)
+    if (error) { onError(error.message); return }
+    onReload()
+  }
+
   async function handleQuantityChange(doorItemId, newQty) {
     const q = Number(newQty)
     if (!Number.isFinite(q) || q < 1) return
@@ -757,6 +787,13 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   const canBulkEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
   return (
     <div className="card">
+      {(profile.role === 'admin' || profile.role === 'engineer') && (
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button className="btn-secondary sm" disabled={bulkBusy} onClick={bulkApproveAllPending}>
+            اعتماد كل البنود المعلّقة في المشروع
+          </button>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 4 }}>
         <div className="field">
           <label>رقم الأوردر</label>
@@ -808,7 +845,9 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
                   const isDoorLeaf = it.item_types?.name === 'ضلفة'
                   const isVentCount = it.item_types?.name === 'عدد الهوايات'
                   const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
+                  const canApproveItem = ['admin', 'engineer'].includes(profile.role)
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
+                  const statusCls = it.status === 'approved' ? 'badge-empty' : it.status === 'rejected' ? 'badge-danger' : 'badge-pending'
                   if (isDoorLeaf && profile.role === 'admin') {
                     return (
                       <select
@@ -827,19 +866,31 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
                   }
                   if (isVentCount && canEdit) {
                     return (
-                      <span key={it.id} className="badge badge-empty" style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span key={it.id} className={`badge ${statusCls}`} style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                         عدد الهوايات ×
                         <input
                           type="number" min={1} defaultValue={it.quantity}
                           onBlur={(e) => { if (Number(e.target.value) !== it.quantity) handleQuantityChange(it.id, e.target.value) }}
                           style={{ width: 44, border: 'none', background: 'transparent', textAlign: 'center', fontWeight: 700 }}
                         />
+                        {it.status === 'pending_review' && canApproveItem && (
+                          <>
+                            <button type="button" title="اعتماد" onClick={() => handleItemApproval(it.id, 'approved')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>✅</button>
+                            <button type="button" title="رفض" onClick={() => handleItemApproval(it.id, 'rejected')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>❌</button>
+                          </>
+                        )}
                       </span>
                     )
                   }
                   return (
-                    <span key={it.id} className="badge badge-empty" style={{ marginInlineEnd: 4 }}>
+                    <span key={it.id} className={`badge ${statusCls}`} style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       {it.item_types?.name} × {it.quantity}{variantLabel}
+                      {it.status === 'pending_review' && canApproveItem && (
+                        <>
+                          <button type="button" title="اعتماد" onClick={() => handleItemApproval(it.id, 'approved')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>✅</button>
+                          <button type="button" title="رفض" onClick={() => handleItemApproval(it.id, 'rejected')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>❌</button>
+                        </>
+                      )}
                     </span>
                   )
                 })}
