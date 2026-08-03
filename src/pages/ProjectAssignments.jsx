@@ -79,11 +79,30 @@ export default function ProjectAssignments() {
     setSelectedDoors((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
+  function roleCompatible(userBaseRole, assignmentRole) {
+    if (userBaseRole === assignmentRole) return true
+    if (userBaseRole === 'data_entry' && assignmentRole === 'delivery_entry') return true
+    return false
+  }
+
   async function handleAssign(e) {
     e.preventDefault()
     setError('')
     if (!newUserId) { setError('اختر مستخدمًا'); return }
     if (scopeMode === 'doors' && selectedDoors.size === 0) { setError('اختر بابًا واحدًا على الأقل، أو اختر "كل المشروع"'); return }
+
+    const chosenUser = profiles.find((p) => p.id === newUserId)
+    if (chosenUser && !roleCompatible(chosenUser.role, newRole)) {
+      setError(`${chosenUser.full_name} دوره الأساسي "${ROLES[chosenUser.role]}"، ومينفعش يتخصص بدور "${ROLES[newRole]}".`)
+      return
+    }
+
+    const duplicate = assignments.find((a) => a.is_active && a.user_id === newUserId && a.role === newRole)
+    if (duplicate) {
+      const ok = window.confirm('المستخدم ده مخصص بالفعل بنفس الدور على هذا المشروع. عايز تضيف تخصيص تاني (مثلاً لأبواب مختلفة)؟')
+      if (!ok) return
+    }
+
     setSaving(true)
     try {
       const { data: assignment, error: aErr } = await supabase
@@ -146,6 +165,7 @@ export default function ProjectAssignments() {
                   {profiles
                     .filter((p) => p.is_active)
                     .filter((p) => allowedRoles.includes(p.role))
+                    .filter((p) => roleCompatible(p.role, newRole))
                     .map((p) => (
                       <option key={p.id} value={p.id}>{p.full_name} ({ROLES[p.role]})</option>
                     ))}
