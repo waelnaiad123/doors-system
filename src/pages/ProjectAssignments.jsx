@@ -61,7 +61,8 @@ export default function ProjectAssignments() {
     const ids = (aData || []).map((a) => a.id)
     let scopeMap = new Map()
     if (ids.length > 0) {
-      const { data: adData } = await supabase.from('project_assignment_doors').select('assignment_id, door_id').in('assignment_id', ids)
+      const { data: adData, error: adErr } = await supabase.from('project_assignment_doors').select('assignment_id, door_id').in('assignment_id', ids)
+      if (adErr) { setError(adErr.message); return }
       ;(adData || []).forEach((row) => {
         if (!scopeMap.has(row.assignment_id)) scopeMap.set(row.assignment_id, [])
         scopeMap.get(row.assignment_id).push(row.door_id)
