@@ -18,6 +18,7 @@ const NAV_BY_ROLE = {
     { to: '/reports', label: 'التقارير' },
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
     { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين' },
+    { to: '/projects-overview', label: 'نظرة عامة على المشاريع' },
   ],
   data_entry: [
     { to: '/projects', label: 'المشاريع' },
@@ -47,6 +48,7 @@ const NAV_BY_ROLE = {
     { to: '/additional-works', label: 'بيان الأعمال الإضافية' },
     { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
     { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين', requiresFlag: 'is_installations_manager' },
+    { to: '/projects-overview', label: 'نظرة عامة على المشاريع', requiresFlag: 'is_installations_manager' },
   ],
   delivery_entry: [
     { to: '/delivery', label: 'التسليمات' },
