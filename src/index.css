@@ -169,11 +169,11 @@ tr:hover td { background: var(--bg); }
   .print-compact th {
     font-size: 9px !important;
     padding: 2px 3px !important;
-    line-height: 1.3 !important;
+    line-height: 1.25 !important;
     font-weight: 700;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    overflow: visible;
+    white-space: normal;
+    word-break: break-word;
   }
   .print-compact td {
     font-size: 11px !important;
