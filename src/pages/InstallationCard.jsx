@@ -223,21 +223,21 @@ function InstallationCardView({ project, period, month, year, start, data, names
         )}
       </div>
 
-      <div className="card" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', paddingTop: 12 }}>
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', paddingTop: 4 }}>
         <div>
           <div>المشرف المسؤول</div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>{names?.supervisorNames || '—'}</div>
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 3 }}>التوقيع</div>
         </div>
         <div>
           <div>المهندس المسؤول</div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>{names?.engineerNames || '—'}</div>
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 3 }}>التوقيع</div>
         </div>
         <div>
           <div>مدير التركيبات</div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>&nbsp;</div>
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 3 }}>التوقيع</div>
         </div>
       </div>
     </div>
