@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+dimport React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
@@ -43,7 +43,7 @@ export default function ProjectsOverview() {
       const { data: assigns, error: e2 } = await fetchAllRows((from, to) =>
         supabase
           .from('project_assignments')
-          .select('project_id, role, profiles(full_name)')
+          .select('project_id, role, profiles!project_assignments_user_id_fkey(full_name)')
           .in('project_id', projectIds).eq('is_active', true)
           .range(from, to)
       )
@@ -204,4 +204,3 @@ export default function ProjectsOverview() {
     </div>
   )
 }
-
