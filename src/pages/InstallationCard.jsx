@@ -115,7 +115,24 @@ async function fetchCardRawData(pid) {
   return { totalItems, installRows: installs || [], workforceRows: wf || [], notesRows: notes || [] }
 }
 
-function InstallationCardView({ project, period, month, year, start, data, pageBreakBefore }) {
+async function fetchTeamNames(pid) {
+  const { data, error } = await supabase
+    .from('project_assignments')
+    .select('role, profiles!project_assignments_user_id_fkey(full_name)')
+    .eq('project_id', pid).eq('is_active', true).in('role', ['supervisor', 'engineer'])
+  if (error) throw error
+  const supervisors = []
+  const engineers = []
+  ;(data || []).forEach((r) => {
+    const name = r.profiles?.full_name
+    if (!name) return
+    if (r.role === 'supervisor' && !supervisors.includes(name)) supervisors.push(name)
+    if (r.role === 'engineer' && !engineers.includes(name)) engineers.push(name)
+  })
+  return { supervisorNames: supervisors.join('، '), engineerNames: engineers.join('، ') }
+}
+
+function InstallationCardView({ project, period, month, year, start, data, names, pageBreakBefore }) {
   const { projectTotals, beforeTotals, dailyData, periodTotals, cumulativeThroughEnd, projectPointsTotal, periodNotes, periodReasons } = data
   return (
     <div style={pageBreakBefore ? { pageBreakBefore: 'always' } : undefined}>
@@ -206,10 +223,22 @@ function InstallationCardView({ project, period, month, year, start, data, pageB
         )}
       </div>
 
-      <div className="card" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', paddingTop: 40 }}>
-        <div>المشرف المسؤول<div style={{ borderTop: '1px solid var(--border)', marginTop: 40, paddingTop: 4 }}>التوقيع</div></div>
-        <div>المهندس المسؤول<div style={{ borderTop: '1px solid var(--border)', marginTop: 40, paddingTop: 4 }}>التوقيع</div></div>
-        <div>مدير التركيبات<div style={{ borderTop: '1px solid var(--border)', marginTop: 40, paddingTop: 4 }}>التوقيع</div></div>
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', paddingTop: 12 }}>
+        <div>
+          <div>المشرف المسؤول</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>{names?.supervisorNames || '—'}</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+        </div>
+        <div>
+          <div>المهندس المسؤول</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>{names?.engineerNames || '—'}</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+        </div>
+        <div>
+          <div>مدير التركيبات</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', minHeight: 16 }}>&nbsp;</div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 4 }}>التوقيع</div>
+        </div>
       </div>
     </div>
   )
@@ -233,6 +262,7 @@ export default function InstallationCard() {
 
   const [printAllBusy, setPrintAllBusy] = useState(false)
   const [printAllCards, setPrintAllCards] = useState(null) // null = مش شغال، array = جاهز للطباعة
+  const [teamNames, setTeamNames] = useState({ supervisorNames: '', engineerNames: '' })
 
   useEffect(() => { loadProjects() }, [])
   useEffect(() => { if (projectId) loadProjectData() }, [projectId]) // eslint-disable-line
@@ -287,6 +317,9 @@ export default function InstallationCard() {
         .from('daily_project_notes').select('note_date, installation_notes, non_execution_reason, status').eq('project_id', projectId)
       if (e4) throw e4
       setNotesRows(notes || [])
+
+      const names = await fetchTeamNames(projectId)
+      setTeamNames(names)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -328,7 +361,8 @@ export default function InstallationCard() {
         if (!proj) continue
         const raw = await fetchCardRawData(pid)
         const data = computeCardData(raw.totalItems, raw.installRows, raw.workforceRows, raw.notesRows, pStart, pEnd, pDays)
-        cards.push({ project: proj, data })
+        const names = await fetchTeamNames(pid)
+        cards.push({ project: proj, data, names })
       }
       setPrintAllCards({ cards, start: pStart })
     } catch (e) {
@@ -400,13 +434,14 @@ export default function InstallationCard() {
               <button className="btn-primary" onClick={() => window.print()}>🖨 طباعة الكل</button>
             </div>
           </div>
-          {printAllCards.cards.map(({ project: proj, data }, i) => (
+          {printAllCards.cards.map(({ project: proj, data, names }, i) => (
             <InstallationCardView
               key={proj.id}
               project={proj}
               period={period} month={month} year={year}
               start={printAllCards.start}
               data={data}
+              names={names}
               pageBreakBefore={i > 0}
             />
           ))}
@@ -418,7 +453,7 @@ export default function InstallationCard() {
           <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
             <button className="btn-primary" onClick={() => window.print()}>🖨 طباعة الكارت</button>
           </div>
-          <InstallationCardView project={project} period={period} month={month} year={year} start={start} data={cardData} />
+          <InstallationCardView project={project} period={period} month={month} year={year} start={start} data={cardData} names={teamNames} />
         </>
       )}
     </div>
