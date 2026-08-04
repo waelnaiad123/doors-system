@@ -17,10 +17,11 @@ export default function ProjectAssignments() {
   const [notice, setNotice] = useState('')
 
   const allowedRoles = useMemo(() => {
+    if (profile.role === 'admin' || profile.is_installations_manager) return ROLE_LIST.filter((r) => r !== 'admin')
     if (profile.role === 'data_entry') return ['engineer']
     if (profile.role === 'engineer') return ['technician', 'supervisor', 'delivery_entry']
-    return ROLE_LIST.filter((r) => r !== 'admin')
-  }, [profile.role])
+    return []
+  }, [profile.role, profile.is_installations_manager])
 
   const [newUserId, setNewUserId] = useState('')
   const [newRole, setNewRole] = useState(profile.role === 'data_entry' ? 'engineer' : 'technician')
@@ -167,7 +168,6 @@ export default function ProjectAssignments() {
                   <option value="">اختر...</option>
                   {profiles
                     .filter((p) => p.is_active)
-                    .filter((p) => allowedRoles.includes(p.role))
                     .filter((p) => roleCompatible(p.role, newRole))
                     .map((p) => (
                       <option key={p.id} value={p.id}>{p.full_name} ({ROLES[p.role]})</option>
