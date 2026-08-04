@@ -195,13 +195,22 @@ export default function UsersScreen() {
                     </td>
                     <td>
                       {u.role === 'data_entry' && (
-                        <button
-                          className={u.all_projects_data_entry ? 'btn-ok sm' : 'btn-secondary sm'}
-                          disabled={busyId === u.id}
-                          onClick={() => updateField(u, 'all_projects_data_entry', !u.all_projects_data_entry)}
-                        >
-                          {u.all_projects_data_entry ? 'كل المشاريع ✓' : 'تفويض لكل المشاريع'}
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <button
+                            className={u.all_projects_data_entry ? 'btn-ok sm' : 'btn-secondary sm'}
+                            disabled={busyId === u.id}
+                            onClick={() => updateField(u, 'all_projects_data_entry', !u.all_projects_data_entry)}
+                          >
+                            {u.all_projects_data_entry ? 'مدخل بيانات: كل المشاريع ✓' : 'تفويض مدخل بيانات لكل المشاريع'}
+                          </button>
+                          <button
+                            className={u.all_projects_delivery_entry ? 'btn-ok sm' : 'btn-secondary sm'}
+                            disabled={busyId === u.id}
+                            onClick={() => updateField(u, 'all_projects_delivery_entry', !u.all_projects_delivery_entry)}
+                          >
+                            {u.all_projects_delivery_entry ? 'مدخل تسليمات: كل المشاريع ✓' : 'تفويض مدخل تسليمات لكل المشاريع'}
+                          </button>
+                        </div>
                       )}
                       {u.role === 'delivery_entry' && (
                         <button
