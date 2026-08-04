@@ -19,6 +19,8 @@ export default function WorkforceScreen() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const isLocked = profile.role === 'supervisor' && new Date().getHours() >= 16
+
   useEffect(() => { loadProjects() }, [])
   useEffect(() => { if (projects.length > 0) loadEntries() }, [date, projects]) // eslint-disable-line
 
@@ -41,6 +43,7 @@ export default function WorkforceScreen() {
   }
 
   async function handleSave(projectId, headcountValue, plannedPointsValue, notesValue) {
+    if (isLocked) return
     setSavingId(projectId)
     setError(''); setNotice('')
     const headcount = Number(headcountValue)
@@ -63,6 +66,11 @@ export default function WorkforceScreen() {
       <h1>حصر الأفراد والنقاط المخططة يوميًا</h1>
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
+      {isLocked && (
+        <div className="alert" style={{ background: 'var(--pending-soft)', color: 'var(--pending)' }}>
+          الشاشة دي بتقفل للمشرف بعد الساعة 4 عصرًا يوميًا. تقدر تشوف البيانات بس، ومتقدرش تدخل أو تعدّل حصر أفراد دلوقتي.
+        </div>
+      )}
 
       <div className="card">
         <div className="field">
@@ -84,6 +92,7 @@ export default function WorkforceScreen() {
                 project={p}
                 entry={entries[p.id]}
                 busy={savingId === p.id}
+                locked={isLocked}
                 onSave={(hc, pp, notes) => handleSave(p.id, hc, pp, notes)}
               />
             ))}
@@ -94,7 +103,7 @@ export default function WorkforceScreen() {
   )
 }
 
-function WorkforceRow({ project, entry, busy, onSave }) {
+function WorkforceRow({ project, entry, busy, locked, onSave }) {
   const [headcount, setHeadcount] = useState(entry?.headcount ?? '')
   const [plannedPoints, setPlannedPoints] = useState(entry?.planned_points ?? '')
   const [notes, setNotes] = useState(entry?.notes ?? '')
@@ -117,17 +126,17 @@ function WorkforceRow({ project, entry, busy, onSave }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div className="field" style={{ marginBottom: 0, width: 110 }}>
           <label>عدد الأفراد</label>
-          <input type="number" min={0} value={headcount} onChange={(e) => setHeadcount(e.target.value)} style={{ width: '100%' }} />
+          <input type="number" min={0} disabled={locked} value={headcount} onChange={(e) => setHeadcount(e.target.value)} style={{ width: '100%' }} />
         </div>
         <div className="field" style={{ marginBottom: 0, width: 130 }}>
           <label>النقاط المخططة</label>
-          <input type="number" min={0} value={plannedPoints} onChange={(e) => setPlannedPoints(e.target.value)} style={{ width: '100%' }} />
+          <input type="number" min={0} disabled={locked} value={plannedPoints} onChange={(e) => setPlannedPoints(e.target.value)} style={{ width: '100%' }} />
         </div>
         <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 160 }}>
           <label>ملاحظات (اختياري)</label>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: '100%' }} />
+          <input disabled={locked} value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: '100%' }} />
         </div>
-        <button className="btn-primary" disabled={busy || headcount === ''} onClick={() => onSave(headcount, plannedPoints, notes)}>
+        <button className="btn-primary" disabled={locked || busy || headcount === ''} onClick={() => onSave(headcount, plannedPoints, notes)}>
           {busy ? 'جارِ الحفظ...' : 'حفظ'}
         </button>
       </div>
