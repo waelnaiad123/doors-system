@@ -164,10 +164,11 @@ tr:hover td { background: var(--bg); }
 
   .print-compact { overflow: visible !important; }
   .print-compact > div { overflow: visible !important; width: 100% !important; }
-  .print-compact table { table-layout: fixed; width: 100%; }
+  .print-compact table { table-layout: fixed; width: 100%; border-collapse: collapse; }
   .print-compact th {
     font-size: 9px !important;
-    padding: 1px !important;
+    padding: 0px 2px !important;
+    line-height: 1.1 !important;
     font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -175,7 +176,8 @@ tr:hover td { background: var(--bg); }
   .print-compact td {
     font-size: 11px !important;
     font-weight: 400;
-    padding: 1px 2px !important;
+    padding: 0px 2px !important;
+    line-height: 1.15 !important;
     overflow: hidden;
     text-overflow: ellipsis;
   }
