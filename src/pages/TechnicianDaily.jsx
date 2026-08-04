@@ -33,28 +33,31 @@ export default function TechnicianDaily() {
   const [notesOpen, setNotesOpen] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
 
-  useEffect(() => { loadProjects(); loadToday() }, []) // eslint-disable-line
+  useEffect(() => { loadProjects() }, []) // eslint-disable-line
+  useEffect(() => { if (projects.length > 0) { loadWorkforceReminder(); loadToday() } }, [projects]) // eslint-disable-line
   useEffect(() => { if (projectId) loadPending() }, [projectId, search]) // eslint-disable-line
   useEffect(() => { if (projectId) loadNote() }, [projectId]) // eslint-disable-line
-  useEffect(() => { if (projects.length > 0) loadWorkforceReminder() }, [projects]) // eslint-disable-line
 
   async function loadWorkforceReminder() {
     const projectIds = projects.map((p) => p.id)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('daily_workforce').select('project_id, headcount')
       .eq('work_date', todayStr()).gt('headcount', 0).in('project_id', projectIds)
+    if (error) { setError(error.message); return }
     setWorkforceToday(data || [])
-    const { data: notesData } = await supabase
+    const { data: notesData, error: notesErr } = await supabase
       .from('daily_project_notes').select('project_id')
       .eq('note_date', todayStr()).in('project_id', projectIds)
+    if (notesErr) { setError(notesErr.message); return }
     setNotesToday(notesData || [])
   }
 
   async function loadNote() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('daily_project_notes').select('*')
       .eq('project_id', projectId).eq('note_date', todayStr()).eq('created_by', profile.id)
       .maybeSingle()
+    if (error) { setError(error.message); return }
     if (data) {
       setInstallNotes(data.installation_notes || '')
       setNonExecReason(data.non_execution_reason || '')
@@ -107,10 +110,12 @@ export default function TechnicianDaily() {
   }
 
   async function loadToday() {
+    const projectIds = projects.map((p) => p.id)
+    if (projectIds.length === 0) { setToday([]); return }
     const { data, error } = await supabase
       .from('v_installations_detail')
       .select('*')
-      .eq('technician_id', profile.id)
+      .in('project_id', projectIds)
       .eq('installed_at', todayStr())
       .order('door_code')
     if (!error) setToday(data || [])
@@ -343,7 +348,7 @@ export default function TechnicianDaily() {
 
       <div className="card">
         <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-          <h2>ملخص تركيباتي اليوم</h2>
+          <h2>التركيبات المسجّلة اليوم (كل الفريق)</h2>
           {today.length > 0 && (
             <span className="badge badge-ok">
               إجمالي النقاط: {today.reduce((s, r) => s + (Number(r.points_earned) || 0), 0)}
@@ -355,7 +360,7 @@ export default function TechnicianDaily() {
         ) : (
           <table>
             <thead>
-              <tr><th>المشروع</th><th>الباب</th><th>البند</th><th>النقاط</th><th>الحالة</th><th></th></tr>
+              <tr><th>المشروع</th><th>الباب</th><th>البند</th><th>مين دخّله</th><th>النقاط</th><th>الحالة</th><th></th></tr>
             </thead>
             <tbody>
               {today.map((r) => (
@@ -363,6 +368,9 @@ export default function TechnicianDaily() {
                   <td>{r.project_name}</td>
                   <td className="code-cell">{r.door_code}</td>
                   <td>{r.item_type}</td>
+                  <td style={{ fontSize: 12.5, color: r.technician_id === profile.id ? 'inherit' : 'var(--muted)' }}>
+                    {r.technician_id === profile.id ? 'أنا' : r.technician_name}
+                  </td>
                   <td className="code-cell">{r.points_earned}</td>
                   <td>
                     <span className={r.status === 'approved' ? 'badge badge-ok' : 'badge badge-pending'}>
@@ -370,7 +378,7 @@ export default function TechnicianDaily() {
                     </span>
                   </td>
                   <td>
-                    {r.status === 'pending_review' && (
+                    {r.status === 'pending_review' && r.technician_id === profile.id && (
                       <button className="btn-danger sm" onClick={() => handleUndo(r.installation_id)}>تراجع</button>
                     )}
                   </td>
