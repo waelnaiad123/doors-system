@@ -126,12 +126,12 @@ function InstallationCardView({ project, period, month, year, start, data, pageB
             <h2 style={{ marginBottom: 2 }}>كارت متابعة إنتاجية ونقاط المشروع</h2>
             <div style={{ fontSize: 13 }}>الشركة الفرنسية للصناعات المعدنية — إدارة التركيبات</div>
           </div>
-          <table style={{ fontSize: 12.5 }}>
+          <table style={{ fontSize: 12.5, borderCollapse: 'collapse' }}>
             <tbody>
-              <tr><td><strong>اسم المشروع</strong></td><td>{project.project_name}</td></tr>
-              <tr><td><strong>اسم العميل</strong></td><td>{project.client_name || '—'}</td></tr>
-              <tr><td><strong>P.O</strong></td><td>{project.project_number}</td></tr>
-              <tr><td><strong>إنتاجية مدة</strong></td><td>{period} / شهر {month}/{year}</td></tr>
+              <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>اسم المشروع</strong></td><td style={{ padding: '1px 0' }}>{project.project_name}</td></tr>
+              <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>اسم العميل</strong></td><td style={{ padding: '1px 0' }}>{project.client_name || '—'}</td></tr>
+              <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>P.O</strong></td><td style={{ padding: '1px 0' }}>{project.project_number}</td></tr>
+              <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>إنتاجية مدة</strong></td><td style={{ padding: '1px 0' }}>{period} / شهر {month}/{year}</td></tr>
             </tbody>
           </table>
         </div>
@@ -424,4 +424,3 @@ export default function InstallationCard() {
     </div>
   )
 }
-
