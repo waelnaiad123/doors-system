@@ -164,6 +164,7 @@ tr:hover td { background: var(--bg); }
 
   .print-compact { overflow: visible !important; }
   .print-compact > div { overflow: visible !important; width: 100% !important; }
+  .print-compact { padding: 2px !important; }
   .print-compact table { table-layout: fixed; width: 100%; border-collapse: collapse; }
   .print-compact th {
     font-size: 9px !important;
@@ -171,6 +172,7 @@ tr:hover td { background: var(--bg); }
     line-height: 1.1 !important;
     font-weight: 700;
     overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
   .print-compact td {
@@ -179,8 +181,10 @@ tr:hover td { background: var(--bg); }
     padding: 0px 2px !important;
     line-height: 1.15 !important;
     overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .print-compact tr, .print-compact tr td, .print-compact tr th { height: auto !important; }
   .print-compact tr { page-break-inside: avoid; }
   .print-only { display: inline !important; }
 
