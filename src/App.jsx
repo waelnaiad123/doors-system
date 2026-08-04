@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
 import UpdatePassword from './pages/UpdatePassword'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
@@ -23,12 +24,12 @@ import ProjectsOverview from './pages/ProjectsOverview'
 import BackupExport from './pages/BackupExport'
 
 const DEFAULT_ROUTE_BY_ROLE = {
-  admin: '/projects',
-  data_entry: '/projects',
-  technician: '/technician',
-  supervisor: '/approval',
-  engineer: '/projects',
-  delivery_entry: '/delivery',
+  admin: '/dashboard',
+  data_entry: '/dashboard',
+  technician: '/dashboard',
+  supervisor: '/dashboard',
+  engineer: '/dashboard',
+  delivery_entry: '/dashboard',
 }
 
 function RequireAuth({ children }) {
@@ -95,6 +96,7 @@ export default function App() {
               path="additional-works"
               element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
             />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route
               path="backup"
               element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
