@@ -1,18 +1,361 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>نظام متابعة تركيبات الأبواب</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+/* ==========================================================================
+   نظام تصميم بسيط ومقصود لأداة تشغيل ميدانية (وليس موقع تسويقي):
+   الأولوية للوضوح، التباين العالي، سرعة القراءة على الموبايل/التابلت في الموقع،
+   ودعم كامل للعربية RTL. عنصر التمييز: حلقات التقدم الدائرية لنسب التركيب.
+   ========================================================================== */
+
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #16202b;
+  --muted: #5b6b7c;
+  --border: #e2e8f0;
+
+  --nav-bg: #0f1b2a;
+  --nav-ink: #d7e0ea;
+  --nav-ink-active: #ffffff;
+
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-soft: #eaf1ff;
+
+  --ok: #15803d;
+  --ok-soft: #e8f5ec;
+  --pending: #b45309;
+  --pending-soft: #fdf1e2;
+  --danger: #b91c1c;
+  --danger-soft: #fbe9e9;
+  --empty: #94a3b8;
+  --empty-soft: #eef1f5;
+  --status-yellow: #a16207;
+  --status-yellow-soft: #fef9c3;
+  --status-blue: #1d4ed8;
+  --status-blue-soft: #dbeafe;
+  --status-green: #15803d;
+  --status-green-soft: #dcfce7;
+
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(15, 27, 42, 0.06), 0 1px 8px rgba(15, 27, 42, 0.04);
+
+  font-family: "IBM Plex Sans Arabic", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+code, .mono, .code-cell { font-family: "IBM Plex Mono", monospace; }
+
+h1, h2, h3 { margin: 0 0 4px; font-weight: 700; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 15px; color: var(--muted); font-weight: 600; }
+
+.app-shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--nav-bg);
+  color: var(--nav-ink);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar .brand { color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 18px; padding: 0 8px; }
+.sidebar .brand small { display: block; color: var(--nav-ink); font-weight: 400; font-size: 12px; margin-top: 2px; }
+.sidebar a {
+  color: var(--nav-ink);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.sidebar a:hover { background: rgba(255,255,255,0.06); }
+.sidebar a.active { background: var(--primary); color: #fff; }
+.sidebar .user-box { margin-top: auto; padding: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px; }
+.sidebar .user-box button { margin-top: 8px; }
+
+.main { flex: 1; padding: 22px 26px; max-width: 1200px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+label { font-size: 13px; color: var(--muted); font-weight: 600; display: block; margin-bottom: 4px; }
+.field { margin-bottom: 12px; }
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary { background: #fff; border-color: var(--border); color: var(--ink); }
+.btn-secondary:hover { background: var(--bg); }
+.btn-danger { background: var(--danger-soft); color: var(--danger); }
+.btn-ok { background: var(--ok-soft); color: var(--ok); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.sm { padding: 5px 10px; font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; position: sticky; top: 0; background: var(--surface); }
+tr:hover td { background: var(--bg); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 100px; font-size: 12px; font-weight: 600;
+}
+.badge-ok { background: var(--ok-soft); color: var(--ok); }
+.badge-pending { background: var(--pending-soft); color: var(--pending); }
+.badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-empty { background: var(--empty-soft); color: var(--empty); }
+.badge-status-yellow { background: var(--status-yellow-soft); color: var(--status-yellow); }
+.badge-status-blue { background: var(--status-blue-soft); color: var(--status-blue); }
+.badge-status-green { background: var(--status-green-soft); color: var(--status-green); }
+
+.status-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 12px; }
+.status-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 5px; vertical-align: middle; }
+
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: none; }
+  .main, .card { box-shadow: none !important; border: none !important; padding: 4px !important; margin-bottom: 4px !important; }
+  body { background: #fff !important; }
+  table { font-size: 11px; }
+  h1, h2, h3 { margin: 2px 0 !important; font-size: 14px !important; }
+
+  .print-compact { overflow: visible !important; }
+  .print-compact > div { overflow: visible !important; width: 100% !important; }
+  .print-compact table { table-layout: fixed; width: 100%; }
+  .print-compact th {
+    font-size: 9px !important;
+    padding: 1px !important;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .print-compact td {
+    font-size: 11px !important;
+    font-weight: 400;
+    padding: 1px 2px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .print-compact tr { page-break-inside: avoid; }
+  .print-only { display: inline !important; }
+
+  @page { size: A4 landscape; margin: 8mm; }
+  .print-a3 { page: a3page; }
+  @page a3page { size: A3 landscape; margin: 8mm; }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}
+
+.progress-ring { display: inline-flex; align-items: center; gap: 10px; }
+.progress-ring .pct { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 13px; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-state .icon { font-size: 28px; margin-bottom: 8px; }
+
+.reminder-banner {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 18px;
+}
+.reminder-line {
+  display: block;
+  background: var(--pending-soft); color: var(--pending);
+  border: 1px solid var(--pending);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 13.5px; font-weight: 600;
+  text-decoration: none;
+}
+.reminder-line:hover { filter: brightness(0.97); }
+
+/* ================= لوحة التحكم الرئيسية ================= */
+:root {
+  --dash-accent: #b8763e;      /* نحاسي محروق - يوحي بخامات الأبواب المعدنية */
+  --dash-accent-soft: #f5e9dc;
+  --dash-ink-deep: #0f1b2a;
+}
+
+.dash-titleblock {
+  position: relative;
+  background: var(--nav-bg);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dash-titleblock::after {
+  content: '';
+  position: absolute; inset-inline-end: -60px; top: -60px;
+  width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(184,118,62,0.35), transparent 70%);
+}
+.dash-titleblock .eyebrow {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--dash-accent); margin-bottom: 6px;
+}
+.dash-titleblock h1 { margin: 0; font-size: 26px; color: #fff; }
+.dash-titleblock .sub { color: #b7c4d3; font-size: 13.5px; margin-top: 4px; }
+.dash-titleblock .date {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: #b7c4d3;
+  white-space: nowrap; position: relative; z-index: 1;
+}
+
+.dash-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px; margin-bottom: 22px;
+}
+.dash-stat {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.dash-stat:hover { border-color: var(--dash-accent); }
+.dash-stat .corner {
+  position: absolute; width: 12px; height: 12px; border-color: var(--dash-accent);
+  opacity: 0.55;
+}
+.dash-stat .corner.tl { top: 5px; inset-inline-start: 5px; border-top: 2px solid; border-inline-start: 2px solid; }
+.dash-stat .corner.tr { top: 5px; inset-inline-end: 5px; border-top: 2px solid; border-inline-end: 2px solid; }
+.dash-stat .corner.bl { bottom: 5px; inset-inline-start: 5px; border-bottom: 2px solid; border-inline-start: 2px solid; }
+.dash-stat .corner.br { bottom: 5px; inset-inline-end: 5px; border-bottom: 2px solid; border-inline-end: 2px solid; }
+.dash-stat .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.dash-stat .value {
+  font-family: "IBM Plex Mono", monospace; font-size: 30px; font-weight: 600;
+  color: var(--dash-ink-deep); line-height: 1;
+}
+.dash-stat .value.alert { color: var(--danger); }
+.dash-stat .value.warn { color: var(--dash-accent); }
+
+.dash-section-title {
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+.dash-attention {
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px;
+}
+.dash-attention-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--dash-accent-soft); border-inline-start: 3px solid var(--dash-accent);
+  border-radius: 6px; padding: 12px 14px; text-decoration: none; color: var(--ink);
+  font-size: 13.5px;
+}
+.dash-attention-item .go { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--dash-accent); }
+.dash-attention-empty {
+  color: var(--ok); background: var(--ok-soft); border-radius: 6px; padding: 14px;
+  font-size: 13.5px; text-align: center; margin-bottom: 22px;
+}
+
+.dash-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.dash-action-btn {
+  font-size: 13.5px; font-weight: 600; padding: 10px 16px;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--ink); text-decoration: none;
+}
+.dash-action-btn:hover { border-color: var(--dash-accent); color: var(--dash-accent); }
+
+/* عناصر اختيار كبيرة وسهلة اللمس - لشاشة الفني على الموبايل/التابلت في الموقع */
+.chip-select {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 14px; border-radius: 10px; font-size: 14.5px; font-weight: 600;
+  border: 1.5px solid var(--border); cursor: pointer; min-height: 42px;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.chip-select input { width: 21px; height: 21px; flex-shrink: 0; }
+.chip-select.selected { background: var(--pending-soft); color: var(--pending); border-color: var(--pending); }
+.chip-select.unselected { background: var(--bg); color: var(--ink); }
+
+.door-select-all { width: 26px; height: 26px; flex-shrink: 0; cursor: pointer; }
+
+/* شريط إجراء ثابت أسفل الشاشة - يفضل ظاهر أثناء التمرير في القوائم الطويلة */
+.sticky-action-bar {
+  position: sticky; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  margin: 14px -18px -18px;
+  padding: 12px 18px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  box-shadow: 0 -6px 14px rgba(15, 27, 42, 0.08);
+}
+@media (max-width: 780px) {
+  .sticky-action-bar { margin: 14px -14px -14px; padding: 12px 14px; }
+}
+
+.alert { padding: 10px 14px; border-radius: 8px; font-size: 13.5px; margin-bottom: 14px; }
+.alert-error { background: var(--danger-soft); color: var(--danger); }
+.alert-ok { background: var(--ok-soft); color: var(--ok); }
+
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--nav-bg);
+}
+.login-card {
+  background: #fff; border-radius: 14px; padding: 32px; width: 100%; max-width: 380px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+
+@media (max-width: 780px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; }
+  .sidebar .brand, .sidebar .user-box { display: none; }
+  .main { padding: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
