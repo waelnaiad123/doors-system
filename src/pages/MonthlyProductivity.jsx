@@ -38,7 +38,8 @@ export default function MonthlyProductivity() {
   useEffect(() => { if (selectedEngineerId) loadEverything() }, [year, month, selectedEngineerId]) // eslint-disable-line
 
   async function loadEngineersList() {
-    const { data } = await supabase.from('profiles').select('id, full_name').eq('role', 'engineer').eq('is_active', true).order('full_name')
+    const { data, error } = await supabase.from('profiles').select('id, full_name').eq('role', 'engineer').eq('is_active', true).order('full_name')
+    if (error) { setError(error.message); return }
     setEngineersList(data || [])
   }
 
@@ -118,26 +119,29 @@ export default function MonthlyProductivity() {
       setInstalledTotals(installedMap)
 
       // 4) صفوف تقرير الإنتاجية للشهر الحالي والشهر السابق
-      const { data: thisMonthRows } = await supabase
+      const { data: thisMonthRows, error: e6 } = await supabase
         .from('monthly_productivity').select('*')
         .eq('engineer_id', selectedEngineerId).eq('year', year).eq('month', month).in('project_id', projectIds)
+      if (e6) throw e6
       const thisMap = {}
       ;(thisMonthRows || []).forEach((r) => { thisMap[r.project_id] = r })
       setProductivityRows(thisMap)
 
       const prevMonth = month === 1 ? 12 : month - 1
       const prevYear = month === 1 ? year - 1 : year
-      const { data: prevMonthRows } = await supabase
+      const { data: prevMonthRows, error: e7 } = await supabase
         .from('monthly_productivity').select('*')
         .eq('engineer_id', selectedEngineerId).eq('year', prevYear).eq('month', prevMonth).in('project_id', projectIds)
+      if (e7) throw e7
       const prevMap = {}
       ;(prevMonthRows || []).forEach((r) => { prevMap[r.project_id] = r })
       setPrevRows(prevMap)
 
       // 5) نقاط الأعمال الإضافية لنفس الشهر
-      const { data: addWorks } = await supabase
+      const { data: addWorks, error: e8 } = await supabase
         .from('additional_works').select('*')
         .eq('engineer_id', selectedEngineerId).eq('year', year).eq('month', month).in('project_id', projectIds)
+      if (e8) throw e8
       const addMap = {}
       ;(addWorks || []).forEach((r) => {
         addMap[r.project_id] = (Number(r.factory_storage) || 0) + (Number(r.install_storage) || 0)
