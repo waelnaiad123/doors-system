@@ -610,6 +610,25 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
 
   const allVisibleSelected = filteredDoors.length > 0 && filteredDoors.every((d) => selected.has(d.id))
 
+  const itemsSummary = useMemo(() => {
+    const byType = new Map()
+    let pending = 0, approved = 0, rejected = 0
+    const rejectedList = []
+    doors.forEach((d) => {
+      ;(d.door_items || []).forEach((it) => {
+        const name = it.item_types?.name || '—'
+        byType.set(name, (byType.get(name) || 0) + Number(it.quantity || 0))
+        if (it.status === 'pending_review') pending++
+        else if (it.status === 'approved') approved++
+        else if (it.status === 'rejected') {
+          rejected++
+          rejectedList.push({ door_code: d.door_code, item_type: name, quantity: it.quantity })
+        }
+      })
+    })
+    return { byType: Array.from(byType.entries()), pending, approved, rejected, rejectedList }
+  }, [doors])
+
   function toggleSelectAll(checked) {
     setSelected((s) => {
       const n = new Set(s)
@@ -722,11 +741,15 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
     if (!ok) return
     setBulkBusy(true)
     try {
-      const { error } = await supabase
-        .from('door_items')
-        .update({ status: 'approved', reviewed_by: profile.id, reviewed_at: new Date().toISOString() })
-        .in('id', pendingIds)
-      if (error) throw error
+      const CHUNK = 150
+      for (let i = 0; i < pendingIds.length; i += CHUNK) {
+        const batch = pendingIds.slice(i, i + CHUNK)
+        const { error } = await supabase
+          .from('door_items')
+          .update({ status: 'approved', reviewed_by: profile.id, reviewed_at: new Date().toISOString() })
+          .in('id', batch)
+        if (error) throw error
+      }
       onReload()
     } catch (e) {
       onError(e.message)
@@ -787,6 +810,31 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   const canBulkEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
   return (
     <div className="card">
+      {['admin', 'data_entry', 'engineer'].includes(profile.role) && (
+        <div className="card" style={{ background: 'var(--bg)', marginBottom: 14 }}>
+          <h3 style={{ marginBottom: 8 }}>ملخص بنود المشروع</h3>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
+            {itemsSummary.byType.map(([name, qty]) => (
+              <span key={name} className="badge badge-empty">{name}: {qty}</span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <span className="badge badge-pending">معلّق: {itemsSummary.pending}</span>
+            <span className="badge badge-ok">معتمد: {itemsSummary.approved}</span>
+            <span className="badge badge-danger">مرفوض: {itemsSummary.rejected}</span>
+          </div>
+          {profile.role === 'data_entry' && itemsSummary.rejectedList.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <strong style={{ fontSize: 13.5 }}>البنود المرفوضة (محتاجة تصحيح):</strong>
+              <ul style={{ margin: '6px 0 0', paddingInlineStart: 18, fontSize: 13 }}>
+                {itemsSummary.rejectedList.map((r, i) => (
+                  <li key={i}><span className="code-cell">{r.door_code}</span> — {r.item_type} × {r.quantity}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       {(profile.role === 'admin' || profile.role === 'engineer') && (
         <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
           <button className="btn-secondary sm" disabled={bulkBusy} onClick={bulkApproveAllPending}>
