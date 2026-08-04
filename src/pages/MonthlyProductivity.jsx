@@ -10,6 +10,9 @@ function toISO(y, m, d) { return `${y}-${pad(m)}-${pad(d)}` }
 export default function MonthlyProductivity() {
   const { profile } = useAuth()
   const today = new Date()
+  const canManageOthers = profile.role === 'admin' || profile.is_installations_manager
+  const [engineersList, setEngineersList] = useState([])
+  const [selectedEngineerId, setSelectedEngineerId] = useState(profile.role === 'engineer' ? profile.id : '')
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
 
@@ -28,7 +31,16 @@ export default function MonthlyProductivity() {
   const isThisExactMonth = year === today.getFullYear() && month === today.getMonth() + 1
   const canEdit = isCurrentOrPastMonth && (!isThisExactMonth || today.getDate() >= 21)
 
-  useEffect(() => { loadEverything() }, [year, month]) // eslint-disable-line
+  useEffect(() => {
+    if (canManageOthers) loadEngineersList()
+  }, []) // eslint-disable-line
+
+  useEffect(() => { if (selectedEngineerId) loadEverything() }, [year, month, selectedEngineerId]) // eslint-disable-line
+
+  async function loadEngineersList() {
+    const { data } = await supabase.from('profiles').select('id, full_name').eq('role', 'engineer').eq('is_active', true).order('full_name')
+    setEngineersList(data || [])
+  }
 
   async function loadEverything() {
     setLoading(true)
@@ -39,17 +51,18 @@ export default function MonthlyProductivity() {
         supabase
           .from('project_assignments')
           .select('project_id, projects(id, project_name, project_number)')
-          .eq('user_id', profile.id).eq('role', 'engineer').eq('is_active', true)
+          .eq('user_id', selectedEngineerId).eq('role', 'engineer').eq('is_active', true)
           .range(from, to)
       )
       if (eAssign) throw eAssign
       const projectIds = [...new Set((assigns || []).map((a) => a.project_id))]
       if (projectIds.length === 0) { setProjects([]); setLoading(false); return }
 
-      const { data: supAssigns } = await supabase
+      const { data: supAssigns, error: eSup } = await supabase
         .from('project_assignments')
-        .select('project_id, profiles(full_name)')
+        .select('project_id, profiles!project_assignments_user_id_fkey(full_name)')
         .in('project_id', projectIds).eq('role', 'supervisor').eq('is_active', true)
+      if (eSup) console.error('خطأ في جلب أسماء المشرفين:', eSup.message)
       const supervisorByProject = {}
       ;(supAssigns || []).forEach((s) => { supervisorByProject[s.project_id] = s.profiles?.full_name || '—' })
 
@@ -107,7 +120,7 @@ export default function MonthlyProductivity() {
       // 4) صفوف تقرير الإنتاجية للشهر الحالي والشهر السابق
       const { data: thisMonthRows } = await supabase
         .from('monthly_productivity').select('*')
-        .eq('engineer_id', profile.id).eq('year', year).eq('month', month).in('project_id', projectIds)
+        .eq('engineer_id', selectedEngineerId).eq('year', year).eq('month', month).in('project_id', projectIds)
       const thisMap = {}
       ;(thisMonthRows || []).forEach((r) => { thisMap[r.project_id] = r })
       setProductivityRows(thisMap)
@@ -116,7 +129,7 @@ export default function MonthlyProductivity() {
       const prevYear = month === 1 ? year - 1 : year
       const { data: prevMonthRows } = await supabase
         .from('monthly_productivity').select('*')
-        .eq('engineer_id', profile.id).eq('year', prevYear).eq('month', prevMonth).in('project_id', projectIds)
+        .eq('engineer_id', selectedEngineerId).eq('year', prevYear).eq('month', prevMonth).in('project_id', projectIds)
       const prevMap = {}
       ;(prevMonthRows || []).forEach((r) => { prevMap[r.project_id] = r })
       setPrevRows(prevMap)
@@ -124,7 +137,7 @@ export default function MonthlyProductivity() {
       // 5) نقاط الأعمال الإضافية لنفس الشهر
       const { data: addWorks } = await supabase
         .from('additional_works').select('*')
-        .eq('engineer_id', profile.id).eq('year', year).eq('month', month).in('project_id', projectIds)
+        .eq('engineer_id', selectedEngineerId).eq('year', year).eq('month', month).in('project_id', projectIds)
       const addMap = {}
       ;(addWorks || []).forEach((r) => {
         addMap[r.project_id] = (Number(r.factory_storage) || 0) + (Number(r.install_storage) || 0)
@@ -156,7 +169,7 @@ export default function MonthlyProductivity() {
 
       if (!existing) {
         const { error } = await supabase.from('monthly_productivity').insert({
-          project_id: projectId, engineer_id: profile.id, year, month,
+          project_id: projectId, engineer_id: selectedEngineerId, year, month,
           prev_points: prevPoints, month_points: value, created_by: profile.id,
         })
         if (error) throw error
@@ -206,6 +219,15 @@ export default function MonthlyProductivity() {
         {notice && <div className="alert alert-ok">{notice}</div>}
         <div className="card">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+            {canManageOthers && (
+              <div className="field">
+                <label>المهندس</label>
+                <select value={selectedEngineerId} onChange={(e) => setSelectedEngineerId(e.target.value)}>
+                  <option value="">-- اختر مهندسًا --</option>
+                  {engineersList.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+                </select>
+              </div>
+            )}
             <div className="field">
               <label>السنة</label>
               <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
@@ -310,7 +332,7 @@ export default function MonthlyProductivity() {
                 ))}
               </tbody>
             </table>
-            <p style={{ marginTop: 10, fontWeight: 700 }}>إجمالي المهندس: {Math.round(engineerGrandTotal)} نقطة</p>
+            <p style={{ marginTop: 10, fontWeight: 700 }}>إجمالي المهندس {profile.full_name}: {Math.round(engineerGrandTotal)} نقطة</p>
           </div>
         </>
       )}
