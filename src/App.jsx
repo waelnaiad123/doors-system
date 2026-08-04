@@ -19,6 +19,7 @@ import InstallationCard from './pages/InstallationCard'
 import AdditionalWorks from './pages/AdditionalWorks'
 import MonthlyProductivity from './pages/MonthlyProductivity'
 import AdminProductivitySummary from './pages/AdminProductivitySummary'
+import ProjectsOverview from './pages/ProjectsOverview'
 import BackupExport from './pages/BackupExport'
 
 const DEFAULT_ROUTE_BY_ROLE = {
@@ -97,6 +98,10 @@ export default function App() {
             <Route
               path="backup"
               element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
+            />
+            <Route
+              path="projects-overview"
+              element={<RequireRole roles={['admin', 'engineer']}><ProjectsOverview /></RequireRole>}
             />
             <Route
               path="productivity-summary"
