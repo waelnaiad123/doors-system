@@ -198,26 +198,24 @@ function InstallationCardView({ project, period, month, year, start, data, names
       </div>
 
       <div className="card">
-        <h3 style={{ marginBottom: 8 }}>أسباب عدم التنفيذ خلال المدة</h3>
+        <h3 style={{ marginBottom: 3 }}>أسباب عدم التنفيذ خلال المدة</h3>
         {periodReasons.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>لا يوجد.</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>لا يوجد.</p>
         ) : (
-          <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13 }}>
+          <ul style={{ margin: 0, paddingInlineStart: 16, fontSize: 12, lineHeight: 1.35 }}>
             {periodReasons.map((n, i) => (
-              <li key={i}><strong className="code-cell">{n.note_date}</strong>: {n.non_execution_reason}</li>
+              <li key={i} style={{ marginBottom: 1 }}><strong className="code-cell">{n.note_date}</strong>: {n.non_execution_reason}</li>
             ))}
           </ul>
         )}
-      </div>
 
-      <div className="card">
-        <h3 style={{ marginBottom: 8 }}>ملاحظات خلال المدة</h3>
+        <h3 style={{ marginBottom: 3, marginTop: 8 }}>ملاحظات خلال المدة</h3>
         {periodNotes.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>لا يوجد.</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>لا يوجد.</p>
         ) : (
-          <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13 }}>
+          <ul style={{ margin: 0, paddingInlineStart: 16, fontSize: 12, lineHeight: 1.35 }}>
             {periodNotes.map((n, i) => (
-              <li key={i}><strong className="code-cell">{n.note_date}</strong>: {n.installation_notes}</li>
+              <li key={i} style={{ marginBottom: 1 }}><strong className="code-cell">{n.note_date}</strong>: {n.installation_notes}</li>
             ))}
           </ul>
         )}
