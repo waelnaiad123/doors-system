@@ -6,6 +6,7 @@ import ReminderBanner from './ReminderBanner'
 
 const NAV_BY_ROLE = {
   admin: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المشاريع' },
     { to: '/users', label: 'المستخدمون' },
@@ -21,15 +22,18 @@ const NAV_BY_ROLE = {
     { to: '/projects-overview', label: 'نظرة عامة على المشاريع' },
   ],
   data_entry: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المهندس' },
     { to: '/project-status', label: 'موقف مشروع' },
   ],
   technician: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/project-status', label: 'موقف مشروع' },
   ],
   supervisor: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/workforce', label: 'حصر الأفراد' },
     { to: '/technician', label: 'تسجيل تركيب' },
     { to: '/approval', label: 'اعتماد الإدخالات' },
@@ -38,6 +42,7 @@ const NAV_BY_ROLE = {
     { to: '/installation-card', label: 'كارت متابعة تركيبات' },
   ],
   engineer: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المشاريع' },
     { to: '/workforce', label: 'حصر الأفراد' },
@@ -51,6 +56,7 @@ const NAV_BY_ROLE = {
     { to: '/projects-overview', label: 'نظرة عامة على المشاريع', requiresFlag: 'is_installations_manager' },
   ],
   delivery_entry: [
+    { to: '/dashboard', label: 'الرئيسية' },
     { to: '/delivery', label: 'التسليمات' },
     { to: '/project-status', label: 'موقف مشروع' },
   ],
