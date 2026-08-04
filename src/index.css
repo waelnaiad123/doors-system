@@ -178,8 +178,8 @@ tr:hover td { background: var(--bg); }
   .print-compact td {
     font-size: 11px !important;
     font-weight: 400;
-    padding: 0px 2px !important;
-    line-height: 1.15 !important;
+    padding: 2px 3px !important;
+    line-height: 1.35 !important;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
