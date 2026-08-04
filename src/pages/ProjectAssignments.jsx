@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
@@ -6,8 +7,9 @@ import { ROLES, ROLE_LIST } from '../lib/roles'
 
 export default function ProjectAssignments() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
-  const [projectId, setProjectId] = useState('')
+  const [projectId, setProjectId] = useState(searchParams.get('project') || '')
   const [assignments, setAssignments] = useState([])
   const [profiles, setProfiles] = useState([])
   const [doors, setDoors] = useState([])
