@@ -212,6 +212,103 @@ tr:hover td { background: var(--bg); }
 }
 .reminder-line:hover { filter: brightness(0.97); }
 
+/* ================= لوحة التحكم الرئيسية ================= */
+:root {
+  --dash-accent: #b8763e;      /* نحاسي محروق - يوحي بخامات الأبواب المعدنية */
+  --dash-accent-soft: #f5e9dc;
+  --dash-ink-deep: #0f1b2a;
+}
+
+.dash-titleblock {
+  position: relative;
+  background: var(--nav-bg);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dash-titleblock::after {
+  content: '';
+  position: absolute; inset-inline-end: -60px; top: -60px;
+  width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(184,118,62,0.35), transparent 70%);
+}
+.dash-titleblock .eyebrow {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--dash-accent); margin-bottom: 6px;
+}
+.dash-titleblock h1 { margin: 0; font-size: 26px; color: #fff; }
+.dash-titleblock .sub { color: #b7c4d3; font-size: 13.5px; margin-top: 4px; }
+.dash-titleblock .date {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: #b7c4d3;
+  white-space: nowrap; position: relative; z-index: 1;
+}
+
+.dash-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px; margin-bottom: 22px;
+}
+.dash-stat {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.dash-stat:hover { border-color: var(--dash-accent); }
+.dash-stat .corner {
+  position: absolute; width: 12px; height: 12px; border-color: var(--dash-accent);
+  opacity: 0.55;
+}
+.dash-stat .corner.tl { top: 5px; inset-inline-start: 5px; border-top: 2px solid; border-inline-start: 2px solid; }
+.dash-stat .corner.tr { top: 5px; inset-inline-end: 5px; border-top: 2px solid; border-inline-end: 2px solid; }
+.dash-stat .corner.bl { bottom: 5px; inset-inline-start: 5px; border-bottom: 2px solid; border-inline-start: 2px solid; }
+.dash-stat .corner.br { bottom: 5px; inset-inline-end: 5px; border-bottom: 2px solid; border-inline-end: 2px solid; }
+.dash-stat .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.dash-stat .value {
+  font-family: "IBM Plex Mono", monospace; font-size: 30px; font-weight: 600;
+  color: var(--dash-ink-deep); line-height: 1;
+}
+.dash-stat .value.alert { color: var(--danger); }
+.dash-stat .value.warn { color: var(--dash-accent); }
+
+.dash-section-title {
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+.dash-attention {
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px;
+}
+.dash-attention-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--dash-accent-soft); border-inline-start: 3px solid var(--dash-accent);
+  border-radius: 6px; padding: 12px 14px; text-decoration: none; color: var(--ink);
+  font-size: 13.5px;
+}
+.dash-attention-item .go { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--dash-accent); }
+.dash-attention-empty {
+  color: var(--ok); background: var(--ok-soft); border-radius: 6px; padding: 14px;
+  font-size: 13.5px; text-align: center; margin-bottom: 22px;
+}
+
+.dash-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.dash-action-btn {
+  font-size: 13.5px; font-weight: 600; padding: 10px 16px;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--ink); text-decoration: none;
+}
+.dash-action-btn:hover { border-color: var(--dash-accent); color: var(--dash-accent); }
+
 /* عناصر اختيار كبيرة وسهلة اللمس - لشاشة الفني على الموبايل/التابلت في الموقع */
 .chip-select {
   display: inline-flex; align-items: center; gap: 8px;
