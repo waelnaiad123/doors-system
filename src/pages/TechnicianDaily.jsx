@@ -10,6 +10,11 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// النهاردة تفضل متاحة للاختيار لحد الساعة 8 بالليل، حتى لو اتسجل عليها تركيب جزئي بالفعل
+function isTodayStillOpen() {
+  return new Date().getHours() < 20
+}
+
 export default function TechnicianDaily() {
   const { profile } = useAuth()
   const [projects, setProjects] = useState([])
@@ -17,15 +22,17 @@ export default function TechnicianDaily() {
   const [search, setSearch] = useState('')
   const [pending, setPending] = useState([])
   const [selected, setSelected] = useState(new Set())
-  const [workDate, setWorkDate] = useState(todayStr())
+  const [eligibleDates, setEligibleDates] = useState([])
+  const [loadingDates, setLoadingDates] = useState(false)
+  const [workDate, setWorkDate] = useState('')
   const [today, setToday] = useState([])
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingPending, setLoadingPending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-
   const [workforceToday, setWorkforceToday] = useState([])
+  const [untouchedProjectIds, setUntouchedProjectIds] = useState(new Set())
   const [notesToday, setNotesToday] = useState([])
   const [installNotes, setInstallNotes] = useState('')
   const [nonExecReason, setNonExecReason] = useState('')
@@ -34,9 +41,20 @@ export default function TechnicianDaily() {
   const [savingNote, setSavingNote] = useState(false)
 
   useEffect(() => { loadProjects() }, []) // eslint-disable-line
-  useEffect(() => { if (projects.length > 0) { loadWorkforceReminder(); loadToday() } }, [projects]) // eslint-disable-line
-  useEffect(() => { if (projectId) loadPending() }, [projectId, search]) // eslint-disable-line
-  useEffect(() => { if (projectId) loadNote() }, [projectId]) // eslint-disable-line
+  useEffect(() => { if (projects.length > 0) { loadWorkforceReminder(); loadToday(); loadUntouchedProjects() } }, [projects]) // eslint-disable-line
+  useEffect(() => { if (projectId) { loadPending(); loadEligibleDates() } }, [projectId, search]) // eslint-disable-line
+  useEffect(() => { if (projectId) loadNote() }, [projectId, workDate]) // eslint-disable-line
+
+  async function loadUntouchedProjects() {
+    const projectIds = projects.map((p) => p.id)
+    if (projectIds.length === 0) { setUntouchedProjectIds(new Set()); return }
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
+    )
+    if (error) { setError(error.message); return }
+    const touched = new Set((data || []).map((r) => r.project_id))
+    setUntouchedProjectIds(new Set(projectIds.filter((id) => !touched.has(id))))
+  }
 
   async function loadWorkforceReminder() {
     const projectIds = projects.map((p) => p.id)
@@ -52,10 +70,45 @@ export default function TechnicianDaily() {
     setNotesToday(notesData || [])
   }
 
+  // التواريخ المسموح تختارها لتسجيل التركيب: أي يوم فيه حصر أفراد ولسه معندوش أي
+  // تركيب متسجل خالص، بالإضافة للنهاردة تحديدًا (تفضل متاحة لحد الساعة 8 مساءً
+  // حتى لو فيها تركيب جزئي متسجل بالفعل، عشان يقدر يكمل باقي شغل اليوم).
+  async function loadEligibleDates() {
+    setLoadingDates(true)
+    setError('')
+    const { data: wfRows, error: wfErr } = await fetchAllRows((from, to) =>
+      supabase.from('daily_workforce').select('work_date').eq('project_id', projectId).gt('headcount', 0).range(from, to)
+    )
+    if (wfErr) { setError(wfErr.message); setLoadingDates(false); return }
+    // نجيب تواريخ التركيب المسجّلة فعليًا على هذا المشروع تحديدًا (أي حالة، حتى المعلّق يكفي إنه "متسجل")
+    const { data: instForProject, error: instProjErr } = await fetchAllRows((from, to) =>
+      supabase.from('v_installations_detail').select('installed_at').eq('project_id', projectId).range(from, to)
+    )
+    if (instProjErr) { setError(instProjErr.message); setLoadingDates(false); return }
+
+    const installedDates = new Set((instForProject || []).map((r) => r.installed_at))
+    const workforceDates = [...new Set((wfRows || []).map((r) => r.work_date))]
+    const today_ = todayStr()
+
+    const eligible = workforceDates.filter((d) => {
+      if (d === today_) return !installedDates.has(d) || isTodayStillOpen()
+      return !installedDates.has(d)
+    }).sort((a, b) => b.localeCompare(a)) // الأحدث فوق
+
+    setEligibleDates(eligible)
+    setWorkDate((prev) => {
+      if (prev && eligible.includes(prev)) return prev
+      if (eligible.includes(today_)) return today_
+      return eligible[0] || ''
+    })
+    setLoadingDates(false)
+  }
+
   async function loadNote() {
+    if (!workDate) return
     const { data, error } = await supabase
       .from('daily_project_notes').select('*')
-      .eq('project_id', projectId).eq('note_date', todayStr()).eq('created_by', profile.id)
+      .eq('project_id', projectId).eq('note_date', workDate).eq('created_by', profile.id)
       .maybeSingle()
     if (error) { setError(error.message); return }
     if (data) {
@@ -76,7 +129,7 @@ export default function TechnicianDaily() {
     const { error } = await supabase
       .from('daily_project_notes')
       .upsert({
-        project_id: projectId, note_date: todayStr(), created_by: profile.id,
+        project_id: projectId, note_date: workDate, created_by: profile.id,
         installation_notes: installNotes.trim() || null,
         non_execution_reason: nonExecReason.trim() || null,
       }, { onConflict: 'project_id,note_date,created_by' })
@@ -146,6 +199,10 @@ export default function TechnicianDaily() {
       .filter(Boolean)
   }, [workforceToday, enteredProjectIds, projects])
 
+  const untouchedProjects = useMemo(() => {
+    return projects.filter((p) => untouchedProjectIds.has(p.id) && !reminderProjects.some((r) => r.id === p.id))
+  }, [projects, untouchedProjectIds, reminderProjects])
+
   function toggle(id) {
     setSelected((s) => {
       const n = new Set(s)
@@ -153,7 +210,6 @@ export default function TechnicianDaily() {
       return n
     })
   }
-
   function toggleDoor(doorItems, checked) {
     setSelected((s) => {
       const n = new Set(s)
@@ -164,8 +220,7 @@ export default function TechnicianDaily() {
 
   async function handleSubmit() {
     if (selected.size === 0) return
-    if (!workDate) { setError('اختر تاريخ التركيب الفعلي الأول'); return }
-    if (workDate > todayStr()) { setError('تاريخ التركيب لا يمكن أن يكون في المستقبل'); return }
+    if (!workDate) { setError('اختر تاريخ التركيب الأول'); return }
     setSubmitting(true)
     setError('')
     try {
@@ -175,7 +230,7 @@ export default function TechnicianDaily() {
       const { error } = await supabase.from('installation_records').insert(rows)
       if (error) throw error
       setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد المشرف.`)
-      await Promise.all([loadPending(), loadToday(), loadWorkforceReminder()])
+      await Promise.all([loadPending(), loadToday(), loadWorkforceReminder(), loadEligibleDates()])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -187,13 +242,12 @@ export default function TechnicianDaily() {
     setError('')
     const { error } = await supabase.from('installation_records').delete().eq('id', installationId)
     if (error) { setError(error.message); return }
-    await Promise.all([loadPending(), loadToday(), loadWorkforceReminder()])
+    await Promise.all([loadPending(), loadToday(), loadWorkforceReminder(), loadEligibleDates()])
   }
 
   return (
     <div>
       <h1>تسجيل تركيب</h1>
-
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
@@ -226,21 +280,36 @@ export default function TechnicianDaily() {
                 ))}
               </optgroup>
             )}
-            <optgroup label="باقي مشاريعي">
-              {projects
-                .filter((p) => !reminderProjects.some((r) => r.id === p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-                ))}
+            <optgroup label="مشاريع جديدة لسه معملتش فيها تركيب خالص">
+              {untouchedProjects.map((p) => (
+                <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+              ))}
             </optgroup>
           </select>
+          {reminderProjects.length === 0 && untouchedProjects.length === 0 && !loadingProjects && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>
+              مفيش مشروع متاح للتسجيل دلوقتي. لازم يبقى فيه حصر أفراد النهاردة على المشروع الأول، أو يكون مشروع جديد لسه معملتش فيه تركيب خالص.
+            </p>
+          )}
         </div>
 
         {projectId && (
           <div className="field">
-            <label>تاريخ التركيب الفعلي</label>
-            <input type="date" value={workDate} max={todayStr()} onChange={(e) => setWorkDate(e.target.value)} />
-            {workDate !== todayStr() && (
+            <label>تاريخ التركيب</label>
+            {loadingDates ? (
+              <p style={{ fontSize: 13, color: 'var(--muted)' }}>جارِ تجهيز التواريخ المتاحة...</p>
+            ) : eligibleDates.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--danger)' }}>
+                مفيش تاريخ متاح للتسجيل حاليًا على هذا المشروع (لازم يبقى فيه حصر أفراد أولًا، أو النهاردة قفلت بعد الساعة 8).
+              </p>
+            ) : (
+              <select value={workDate} onChange={(e) => setWorkDate(e.target.value)} style={{ width: '100%' }}>
+                {eligibleDates.map((d) => (
+                  <option key={d} value={d}>{d === todayStr() ? `${d} (النهاردة)` : d}</option>
+                ))}
+              </select>
+            )}
+            {workDate && workDate !== todayStr() && (
               <p style={{ fontSize: 12, color: 'var(--pending)', marginTop: 4 }}>
                 ⚠️ بتسجّل تركيب بتاريخ سابق ({workDate})، مش النهاردة.
               </p>
@@ -256,10 +325,10 @@ export default function TechnicianDaily() {
         )}
       </div>
 
-      {projectId && (
+      {projectId && workDate && (
         <div className="card">
           <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-            <h2 style={{ marginBottom: 0 }}>ملاحظات اليوم عن المشروع (اختياري)</h2>
+            <h2 style={{ marginBottom: 0 }}>ملاحظات يوم {workDate} عن المشروع (اختياري)</h2>
             <button className="btn-secondary sm" onClick={() => setNotesOpen((s) => !s)}>
               {notesOpen ? 'إخفاء' : (installNotes || nonExecReason) ? 'عرض' : '+ إضافة'}
             </button>
@@ -276,7 +345,7 @@ export default function TechnicianDaily() {
                 <textarea rows={2} style={{ width: '100%' }} value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} />
               </div>
               <div className="field">
-                <label>أسباب عدم التنفيذ (لو حصلت مشكلة منعت التركيب النهاردة)</label>
+                <label>أسباب عدم التنفيذ (لو حصلت مشكلة منعت التركيب في هذا اليوم)</label>
                 <textarea rows={2} style={{ width: '100%' }} value={nonExecReason} onChange={(e) => setNonExecReason(e.target.value)} />
               </div>
               <button className="btn-secondary" disabled={savingNote} onClick={saveNote}>
@@ -287,7 +356,7 @@ export default function TechnicianDaily() {
         </div>
       )}
 
-      {projectId && (
+      {projectId && workDate && (
         <div className="card">
           {loadingPending ? (
             <p style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>
@@ -332,10 +401,9 @@ export default function TechnicianDaily() {
                   بيظهر أول {MAX_DOORS_SHOWN} باب فقط من إجمالي {groupedByDoor.length} — استخدم البحث فوق لتضييق النتائج.
                 </p>
               )}
-
               <div className="sticky-action-bar">
                 <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>
-                  {selected.size > 0 ? `تم اختيار ${selected.size} بند` : 'اختر البنود اللي تم تركيبها اليوم'}
+                  {selected.size > 0 ? `تم اختيار ${selected.size} بند` : 'اختر البنود اللي تم تركيبها'}
                 </span>
                 <button className="btn-primary" disabled={selected.size === 0 || submitting} onClick={handleSubmit}>
                   {submitting ? 'جارِ الحفظ...' : `تسجيل التركيب (${selected.size})`}
