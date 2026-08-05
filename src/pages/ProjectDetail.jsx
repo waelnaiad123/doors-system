@@ -15,7 +15,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [tab, setTab] = useState('manual')
+  const [tab, setTab] = useState(profile.role === 'engineer' && !profile.is_installations_manager ? 'list' : 'manual')
   const [editingInfo, setEditingInfo] = useState(false)
   const [clientNameInput, setClientNameInput] = useState('')
 
@@ -99,18 +99,22 @@ export default function ProjectDetail() {
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <div className="toolbar">
-        <button className={tab === 'manual' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('manual')}>
-          إضافة يدوية
-        </button>
-        <button className={tab === 'import' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('import')}>
-          استيراد من ملف
-        </button>
+        {(profile.role !== 'engineer' || profile.is_installations_manager) && (
+          <>
+            <button className={tab === 'manual' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('manual')}>
+              إضافة يدوية
+            </button>
+            <button className={tab === 'import' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('import')}>
+              استيراد من ملف
+            </button>
+          </>
+        )}
         <button className={tab === 'list' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('list')}>
           الأبواب المُضافة ({doors.length})
         </button>
       </div>
 
-      {tab === 'manual' && (
+      {tab === 'manual' && (profile.role !== 'engineer' || profile.is_installations_manager) && (
         <ManualAdd
           projectId={projectId}
           itemTypes={itemTypes}
@@ -119,7 +123,7 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'import' && (
+      {tab === 'import' && (profile.role !== 'engineer' || profile.is_installations_manager) && (
         <ImportFile
           projectId={projectId}
           itemTypes={itemTypes}
