@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder, itemOrderIndex, variantNoteFrom } from '../lib/itemOrder'
+import { useAuth } from '../AuthContext'
 
 export default function ProjectStatusReport() {
+  const { profile } = useAuth()
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
   const [projectName, setProjectName] = useState('')
@@ -17,11 +19,29 @@ export default function ProjectStatusReport() {
 
   async function loadProjects() {
     setLoadingProjects(true)
-    const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+    setError('')
+
+    // الأدمن ومدير التركيبات يشوفوا كل المشاريع. أي دور تاني يشوف بس المشاريع
+    // المخصص عليها فعليًا (فلترة صريحة في الكود، بالإضافة لصلاحيات قاعدة البيانات).
+    if (profile.role === 'admin' || profile.is_installations_manager) {
+      const { data, error } = await fetchAllRows((from, to) =>
+        supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+      )
+      if (error) setError(error.message)
+      setProjects(data || [])
+      setLoadingProjects(false)
+      return
+    }
+
+    const { data: myAssigns, error: assignErr } = await fetchAllRows((from, to) =>
+      supabase.from('project_assignments').select('project_id, projects(id, project_name, project_number)')
+        .eq('user_id', profile.id).eq('is_active', true).range(from, to)
     )
-    if (error) setError(error.message)
-    setProjects(data || [])
+    if (assignErr) { setError(assignErr.message); setLoadingProjects(false); return }
+    const seen = new Map()
+    ;(myAssigns || []).forEach((a) => { if (a.projects) seen.set(a.project_id, a.projects) })
+    const list = Array.from(seen.values()).sort((a, b) => a.project_name.localeCompare(b.project_name))
+    setProjects(list)
     setLoadingProjects(false)
   }
 
@@ -92,7 +112,6 @@ export default function ProjectStatusReport() {
       <div className="no-print">
         <h1>موقف تركيبات وتسليمات المشروع</h1>
         {error && <div className="alert alert-error">{error}</div>}
-
         <div className="card">
           <div className="field">
             <label>اختر المشروع</label>
@@ -102,6 +121,9 @@ export default function ProjectStatusReport() {
                 <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
               ))}
             </select>
+            {!loadingProjects && projects.length === 0 && (
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>مفيش أي مشروع مخصص لك حاليًا.</p>
+            )}
           </div>
         </div>
       </div>
@@ -111,15 +133,12 @@ export default function ProjectStatusReport() {
           <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
             <button className="btn-primary" onClick={() => window.print()}>🖨 طباعة التقرير</button>
           </div>
-
           <h2 style={{ marginBottom: 4 }}>{projectName}</h2>
-
           <div className="status-legend">
             <span><span className="dot" style={{ background: 'var(--status-yellow)' }}></span>تركيب معتمد</span>
             <span><span className="dot" style={{ background: 'var(--status-blue)' }}></span>تسليم للعميل</span>
             <span><span className="dot" style={{ background: 'var(--status-green)' }}></span>تسليم للاستشاري (نهائي)</span>
           </div>
-
           <div className="card">
             <h3 style={{ marginBottom: 8 }}>ملخص إجمالي لكل بند</h3>
             <div style={{ overflowX: 'auto' }}>
@@ -151,7 +170,6 @@ export default function ProjectStatusReport() {
               </table>
             </div>
           </div>
-
           <div className="card">
             <table>
               <thead>
@@ -188,7 +206,6 @@ export default function ProjectStatusReport() {
           </div>
         </>
       )}
-
       {projectId && loadingRows && <p className="no-print" style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>}
       {projectId && !loadingRows && rows.length === 0 && (
         <div className="card empty-state no-print"><div className="icon">📋</div>لا توجد أبواب في هذا المشروع بعد.</div>
