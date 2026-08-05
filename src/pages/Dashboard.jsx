@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
@@ -11,6 +11,12 @@ const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'ماي�
 function todayLabel() {
   const d = new Date()
   return `${WEEKDAYS[d.getDay()]}، ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+function todayLocalISO() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function Corners() {
@@ -32,17 +38,29 @@ function Stat({ to, label, value, tone }) {
   )
 }
 
+const REFRESH_INTERVAL_MS = 90000
+
 export default function Dashboard() {
   const { profile } = useAuth()
+  const location = useLocation()
   const [stats, setStats] = useState([])
   const [attention, setAttention] = useState([])
   const [actions, setActions] = useState([])
   const [loading, setLoading] = useState(true)
+  const fetchingRef = React.useRef(false)
 
-  useEffect(() => { load() }, []) // eslint-disable-line
+  useEffect(() => { load(false) }, [location.pathname]) // eslint-disable-line
+  useEffect(() => {
+    const interval = setInterval(() => load(true), REFRESH_INTERVAL_MS)
+    function onVisible() { if (document.visibilityState === 'visible') load(true) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, []) // eslint-disable-line
 
-  async function load() {
-    setLoading(true)
+  async function load(silent) {
+    if (fetchingRef.current) return
+    fetchingRef.current = true
+    if (!silent) setLoading(true)
     try {
       if (profile.role === 'admin' || profile.is_installations_manager) await loadAdminLike()
       else if (profile.role === 'engineer') await loadEngineer()
@@ -51,10 +69,10 @@ export default function Dashboard() {
       else if (profile.role === 'data_entry') await loadDataEntry()
       else if (profile.role === 'delivery_entry') await loadDeliveryEntry()
     } catch (e) {
-      // لوحة التحكم عرض سريع بس، لو فشل جزء منها نكمل بهدوء من غير ما نوقف الشاشة
       console.error(e)
     } finally {
       setLoading(false)
+      fetchingRef.current = false
     }
   }
 
@@ -66,10 +84,10 @@ export default function Dashboard() {
       fetchAllRows((from, to) => supabase.from('v_installations_detail').select('status').in('status', ['pending_review', 'supervisor_approved']).range(from, to)),
     ])
     setStats([
-      { to: '/projects', label: 'المشاريع النشطة', value: projectsCount ?? '—' },
+      { to: '/projects', label: 'إجمالي المشاريع', value: projectsCount ?? '—' },
       { to: '/users', label: 'مستخدمون نشطون', value: usersCount ?? '—' },
-      { to: '/projects', label: 'بنود بانتظار الاعتماد', value: (pendingItems || []).length, tone: 'warn' },
-      { to: '/approval', label: 'تركيبات بانتظار الاعتماد', value: (pendingInstalls || []).length, tone: 'warn' },
+      { to: '/projects', label: 'بنود بانتظار الاعتماد', value: (pendingItems || []).length, tone: (pendingItems || []).length ? 'warn' : undefined },
+      { to: '/approval', label: 'تركيبات بانتظار الاعتماد', value: (pendingInstalls || []).length, tone: (pendingInstalls || []).length ? 'warn' : undefined },
     ])
     setActions([
       { to: '/users', label: 'المستخدمون' },
@@ -90,8 +108,12 @@ export default function Dashboard() {
       projectIds.length
         ? fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name').in('project_id', projectIds).in('status', ['pending_review', 'supervisor_approved']).range(from, to))
         : Promise.resolve({ data: [] }),
-      fetchAllRows((from, to) => supabase.from('daily_project_notes').select('id, project_id, projects(project_name)').eq('status', 'pending_review').range(from, to)),
-      fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name').eq('status', 'pending_review').range(from, to)),
+      projectIds.length
+        ? fetchAllRows((from, to) => supabase.from('daily_project_notes').select('id, project_id, projects(project_name)').eq('status', 'pending_review').in('project_id', projectIds).range(from, to))
+        : Promise.resolve({ data: [] }),
+      projectIds.length
+        ? fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name').eq('status', 'pending_review').in('project_id', projectIds).range(from, to))
+        : Promise.resolve({ data: [] }),
     ])
 
     setStats([
@@ -101,17 +123,30 @@ export default function Dashboard() {
       { to: '/approval', label: 'تسليمات بانتظار اعتمادي', value: (pendingDeliveries || []).length, tone: (pendingDeliveries || []).length ? 'warn' : undefined },
     ])
 
-    // مشاريع محتاجة إعداد (بنود معلّقة أو فريق ناقص)
     if (projectIds.length > 0) {
       const { data: doorsWithItems } = await fetchAllRows((from, to) =>
         supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
       )
       const pendingProjectIds = new Set()
       ;(doorsWithItems || []).forEach((d) => { if ((d.door_items || []).some((it) => it.status === 'pending_review')) pendingProjectIds.add(d.project_id) })
+
+      const { data: teamAssigns } = await supabase
+        .from('project_assignments').select('project_id, role')
+        .in('project_id', projectIds).eq('is_active', true).in('role', ['supervisor', 'delivery_entry'])
+      const hasSupervisor = new Set((teamAssigns || []).filter((t) => t.role === 'supervisor').map((t) => t.project_id))
+      const hasDelivery = new Set((teamAssigns || []).filter((t) => t.role === 'delivery_entry').map((t) => t.project_id))
+
       const items = []
       const seenNames = new Map()
       ;(myAssigns || []).forEach((a) => { if (a.projects) seenNames.set(a.project_id, a.projects.project_name) })
-      pendingProjectIds.forEach((pid) => items.push({ text: `"${seenNames.get(pid) || ''}" فيه بنود لسه محتاجة اعتمادك`, to: `/assignments?project=${pid}` }))
+      const allRelevant = new Set([...pendingProjectIds, ...projectIds.filter((pid) => !hasSupervisor.has(pid) || !hasDelivery.has(pid))])
+      allRelevant.forEach((pid) => {
+        const reasons = []
+        if (pendingProjectIds.has(pid)) reasons.push('اعتماد البنود المعلّقة')
+        if (!hasSupervisor.has(pid)) reasons.push('تخصيص مشرف')
+        if (!hasDelivery.has(pid)) reasons.push('تخصيص مدخل بيانات تسليمات')
+        items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to: `/assignments?project=${pid}` })
+      })
       setAttention(items.slice(0, 6))
     }
 
@@ -124,17 +159,23 @@ export default function Dashboard() {
   }
 
   async function loadSupervisor() {
-    const [{ data: unentered }, { data: pendingInstalls }] = await Promise.all([
+    const { data: myAssigns } = await fetchAllRows((from, to) =>
+      supabase.from('project_assignments').select('project_id').eq('user_id', profile.id).eq('role', 'supervisor').eq('is_active', true).range(from, to)
+    )
+    const projectIds = [...new Set((myAssigns || []).map((a) => a.project_id))]
+
+    const [{ data: unenteredAll }, { data: pendingInstallsAll }] = await Promise.all([
       fetchAllRows((from, to) => supabase.from('v_unentered_workforce').select('*').range(from, to)),
-      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('status, technician_role').in('status', ['pending_review']).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, status, technician_role').in('status', ['pending_review']).range(from, to)),
     ])
-    const myPending = (pendingInstalls || []).filter((r) => r.technician_role !== 'supervisor')
+    const unentered = (unenteredAll || []).filter((p) => projectIds.includes(p.project_id))
+    const myPending = (pendingInstallsAll || []).filter((r) => projectIds.includes(r.project_id) && r.technician_role !== 'supervisor')
     setStats([
-      { to: '/workforce', label: 'مشاريع محتاجة حصر أفراد اليوم', value: (unentered || []).length, tone: (unentered || []).length ? 'warn' : undefined },
+      { to: '/workforce', label: 'مشاريع محتاجة حصر أفراد اليوم', value: unentered.length, tone: unentered.length ? 'warn' : undefined },
       { to: '/approval', label: 'تركيبات بانتظار اعتمادي', value: myPending.length, tone: myPending.length ? 'warn' : undefined },
     ])
     setAttention(
-      (unentered || []).slice(0, 6).map((p) => ({ text: `"${p.project_name}" لسه محتاج حصر أفراد أو تسجيل تركيب اليوم`, to: '/workforce' }))
+      unentered.slice(0, 6).map((p) => ({ text: `"${p.project_name}" لسه محتاج حصر أفراد أو تسجيل تركيب اليوم`, to: '/workforce' }))
     )
     setActions([
       { to: '/workforce', label: 'حصر الأفراد' },
@@ -144,7 +185,7 @@ export default function Dashboard() {
   }
 
   async function loadTechnician() {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayLocalISO()
     const { data: myAssigns } = await fetchAllRows((from, to) =>
       supabase.from('project_assignments').select('project_id').eq('user_id', profile.id).eq('role', 'technician').eq('is_active', true).range(from, to)
     )
@@ -164,12 +205,18 @@ export default function Dashboard() {
       supabase.from('projects').select('id').range(from, to)
     )
     const projectIds = (myProjects || []).map((p) => p.id)
-    const { data: pending } = projectIds.length
-      ? await fetchAllRows((from, to) => supabase.from('door_items').select('id, doors!inner(project_id)').eq('status', 'pending_review').in('doors.project_id', projectIds).range(from, to))
-      : { data: [] }
+    let pendingCount = 0
+    if (projectIds.length > 0) {
+      const { data: doorsWithItems } = await fetchAllRows((from, to) =>
+        supabase.from('doors').select('door_items(status)').in('project_id', projectIds).range(from, to)
+      )
+      ;(doorsWithItems || []).forEach((d) => {
+        (d.door_items || []).forEach((it) => { if (it.status === 'pending_review') pendingCount++ })
+      })
+    }
     setStats([
       { to: '/projects', label: 'المشاريع', value: projectIds.length },
-      { to: '/projects', label: 'بنود بانتظار اعتماد المهندس', value: (pending || []).length },
+      { to: '/projects', label: 'بنود بانتظار اعتماد المهندس', value: pendingCount },
     ])
     setActions([
       { to: '/projects', label: 'المشاريع' },
