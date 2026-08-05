@@ -34,7 +34,6 @@ export default function ApprovalScreen() {
   const [summaryView, setSummaryView] = useState('item')
   const [showSummary, setShowSummary] = useState(true)
 
-  // بند ما زال بانتظار مرحلة اعتماد أنا لسه أقدر أتصرف فيها؟
   function canApprove(rec) {
     if (profile.role === 'admin' || profile.role === 'engineer') return true
     if (profile.role === 'supervisor') return rec.status === 'pending_review' && rec.technician_role !== 'supervisor'
@@ -62,7 +61,6 @@ export default function ApprovalScreen() {
       m.get(r.project_id).count++
     })
 
-    // المشاريع اللي عندها ملاحظات/أسباب معلقة بس (من غير تركيبات معلقة) لازم تظهر في القائمة كمان
     if (profile.role === 'supervisor' || profile.role === 'engineer' || profile.role === 'admin') {
       const { data: pendingNotes } = await fetchAllRows((from, to) =>
         supabase
@@ -142,7 +140,6 @@ export default function ApprovalScreen() {
 
   const pending = useMemo(() => records.filter((r) => r.status === 'pending_review' || r.status === 'supervisor_approved'), [records])
   const eligiblePending = useMemo(() => pending.filter(canApprove), [pending]) // eslint-disable-line
-
   const groupedByDoor = useMemo(() => {
     const m = new Map()
     pending.forEach((r) => {
@@ -185,7 +182,6 @@ export default function ApprovalScreen() {
   function toggle(id) {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
-
   function toggleDoor(items, checked) {
     const eligible = items.filter(canApprove)
     setSelected((s) => {
@@ -200,7 +196,6 @@ export default function ApprovalScreen() {
     setBusy(true)
     setError('')
     try {
-      // المشرف اعتماده يوقف عند مرحلة وسيطة، المهندس/الأدمن اعتمادهم نهائي مباشرة
       const nextStatus = profile.role === 'supervisor' ? 'supervisor_approved' : 'approved'
       const { data, error } = await supabase
         .from('installation_records')
@@ -254,7 +249,6 @@ export default function ApprovalScreen() {
   return (
     <div>
       <h1>اعتماد الإدخالات</h1>
-
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
@@ -346,7 +340,6 @@ export default function ApprovalScreen() {
                   اعتماد كل الظاهر في المشروع ({eligiblePending.length})
                 </button>
               </div>
-
               {groupedByDoor.map((d) => {
                 const eligibleItems = d.items.filter(canApprove)
                 const allSelected = eligibleItems.length > 0 && eligibleItems.every((it) => selected.has(it.installation_id))
@@ -368,7 +361,6 @@ export default function ApprovalScreen() {
                         </button>
                       )}
                     </div>
-
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {d.items.map((r) => {
                         const eligible = canApprove(r)
@@ -385,6 +377,17 @@ export default function ApprovalScreen() {
                               <span title="يحتاج اعتماد مهندس" style={{ flexShrink: 0 }}>🔒</span>
                             )}
                             <span style={{ flex: 1, fontSize: 14 }}>{r.item_type} × {r.quantity}</span>
+                            <span
+                              className="badge code-cell"
+                              style={{
+                                fontSize: 11,
+                                background: r.installed_at === todayStr() ? 'var(--empty-soft)' : 'var(--pending-soft)',
+                                color: r.installed_at === todayStr() ? 'var(--muted)' : 'var(--pending)',
+                                fontWeight: r.installed_at === todayStr() ? 400 : 700,
+                              }}
+                            >
+                              {r.installed_at === todayStr() ? 'اليوم' : r.installed_at}
+                            </span>
                             <span className={`badge ${STATUS_BADGE[r.status]}`} style={{ fontSize: 11 }}>{STATUS_LABEL[r.status]}</span>
                             <span className="badge badge-empty" style={{ fontSize: 11 }}>{r.points_earned} نقطة</span>
                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.technician_name}</span>
@@ -401,7 +404,6 @@ export default function ApprovalScreen() {
                   </div>
                 )
               })}
-
               <div className="sticky-action-bar">
                 <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                   {selected.size > 0 ? `تم اختيار ${selected.size} بند` : 'اختر بنود للاعتماد المُجمّع'}
