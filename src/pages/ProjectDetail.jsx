@@ -133,6 +133,7 @@ export default function ProjectDetail() {
 }
 
 // ---------------------------------------------------------------------------
+
 const VENT_ONLY_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 const VENT_ALLOWED_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 
@@ -158,7 +159,6 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
     if (!code) { onError('اكتب كود الباب أولًا'); return }
     const validRows = rows.filter((r) => r.item_type_id)
     if (validRows.length === 0) { onError('أضف بندًا واحدًا على الأقل (حلق، ضلفة، أو إكسسوار)'); return }
-
     setSaving(true)
     const { data: door, error: doorErr } = await supabase
       .from('doors')
@@ -218,6 +218,7 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
         </div>
       ))}
       <button type="button" className="btn-secondary sm" onClick={addRow} style={{ marginBottom: 14 }}>+ بند آخر</button>
+
       <div>
         <button className="btn-primary" disabled={saving}>{saving ? 'جارِ الحفظ...' : 'حفظ الباب'}</button>
       </div>
@@ -230,6 +231,7 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
 // ويترك المستخدم يحدد يدويًا أي عمود يمثل كود الباب، وأي أعمدة تمثل كل بند.
 // المطابقة يمكن حفظها محليًا (localStorage) وإعادة استخدامها تلقائيًا لملفات
 // أخرى بنفس رؤوس الأعمدة (مفيد جدًا مع مئات الملفات المتشابهة الشكل).
+
 function ImportFile({ projectId, itemTypes, onSaved, onError }) {
   const [rawSheet, setRawSheet] = useState(null)
   const [headerRowNum, setHeaderRowNum] = useState(1)
@@ -267,7 +269,6 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       const sheet = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
       setRawSheet(rows)
-
       // نخمّن صف العناوين تلقائيًا: الصف اللي فيه أكبر عدد خلايا مكتوبة من أول 6 صفوف
       // (الرؤوس المدمجة زي "General Data" بتملأ خلية واحدة بس، بعكس صف العناوين التفصيلي)
       let bestRow = 0
@@ -329,7 +330,6 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
   function removeDoorCodeCol(colIdx) {
     setMapping((m) => ({ ...m, doorCodeCols: m.doorCodeCols.filter((c) => c !== colIdx) }))
   }
-
   function updateItemMap(itemTypeId, patch) {
     setMapping((m) => ({ ...m, items: { ...m.items, [itemTypeId]: { ...(m.items[itemTypeId] || {}), ...patch } } }))
   }
@@ -365,7 +365,6 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       const location = locRaw !== undefined && locRaw !== null ? String(locRaw).trim() : ''
       if (!doorMap.has(code)) doorMap.set(code, { door_code: code, location, items: [] })
       const doorEntry = doorMap.get(code)
-
       itemTypes.forEach((t) => {
         const im = mapping.items[t.id]
         if (!im || !im.mode || im.mode === 'none') return
@@ -546,6 +545,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           })}
 
           {savedMsg && <div className="alert alert-ok" style={{ marginTop: 10 }}>{savedMsg}</div>}
+
           <div className="toolbar" style={{ marginTop: 14 }}>
             <button type="button" className="btn-secondary" onClick={saveMappingTemplate}>💾 احفظ هذه المطابقة لملفات مشابهة لاحقًا</button>
             <button type="button" className="btn-primary" onClick={buildPreview}>معاينة قبل الاستيراد ←</button>
@@ -584,6 +584,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 }
 
 // ---------------------------------------------------------------------------
+
 function DoorsList({ doors, itemTypes, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
@@ -626,7 +627,11 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
         }
       })
     })
-    return { byType: Array.from(byType.entries()), pending, approved, rejected, rejectedList }
+    const byTypeSorted = sortByItemOrder(
+      Array.from(byType.entries()).map(([name, qty]) => ({ name, qty })),
+      (it) => it.name
+    )
+    return { byType: byTypeSorted, pending, approved, rejected, rejectedList }
   }, [doors])
 
   function toggleSelectAll(checked) {
@@ -636,7 +641,6 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
       return n
     })
   }
-
   function toggleSelectOne(id, checked) {
     setSelected((s) => {
       const n = new Set(s)
@@ -807,6 +811,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   if (doors.length === 0) {
     return <div className="empty-state"><div className="icon">🚪</div>لا توجد أبواب مُضافة بعد.</div>
   }
+
   const canBulkEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
   return (
     <div className="card">
@@ -814,8 +819,8 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
         <div className="card" style={{ background: 'var(--bg)', marginBottom: 14 }}>
           <h3 style={{ marginBottom: 8 }}>ملخص بنود المشروع</h3>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-            {itemsSummary.byType.map(([name, qty]) => (
-              <span key={name} className="badge badge-empty">{name}: {qty}</span>
+            {itemsSummary.byType.map((it) => (
+              <span key={it.name} className="badge badge-empty">{it.name}: {it.qty}</span>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
