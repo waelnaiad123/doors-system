@@ -89,6 +89,50 @@ export default function Dashboard() {
       { to: '/projects', label: 'بنود بانتظار الاعتماد', value: (pendingItems || []).length, tone: (pendingItems || []).length ? 'warn' : undefined },
       { to: '/approval', label: 'تركيبات بانتظار الاعتماد', value: (pendingInstalls || []).length, tone: (pendingInstalls || []).length ? 'warn' : undefined },
     ])
+
+    // تفصيل: كام بند معلّق في كل مشروع، ومين المهندس المسؤول عنه
+    const { data: doorsWithPending } = await fetchAllRows((from, to) =>
+      supabase.from('doors').select('project_id, projects(project_name, project_number), door_items(status)').range(from, to)
+    )
+    const countByProject = new Map() // project_id -> { name, count }
+    ;(doorsWithPending || []).forEach((d) => {
+      const pendingCount = (d.door_items || []).filter((it) => it.status === 'pending_review').length
+      if (pendingCount === 0) return
+      const key = d.project_id
+      const label = d.projects ? `${d.projects.project_number} — ${d.projects.project_name}` : 'مشروع'
+      if (!countByProject.has(key)) countByProject.set(key, { label, count: 0 })
+      countByProject.get(key).count += pendingCount
+    })
+
+    const projectIdsWithPending = [...countByProject.keys()]
+    let engineerByProject = new Map()
+    if (projectIdsWithPending.length > 0) {
+      const { data: engAssigns } = await supabase
+        .from('project_assignments')
+        .select('project_id, profiles!project_assignments_user_id_fkey(full_name)')
+        .in('project_id', projectIdsWithPending).eq('role', 'engineer').eq('is_active', true)
+      ;(engAssigns || []).forEach((a) => {
+        const name = a.profiles?.full_name
+        if (!name) return
+        if (!engineerByProject.has(a.project_id)) engineerByProject.set(a.project_id, [])
+        engineerByProject.get(a.project_id).push(name)
+      })
+    }
+
+    const sorted = [...countByProject.entries()].sort((a, b) => b[1].count - a[1].count)
+    const items = sorted.slice(0, 8).map(([pid, info]) => {
+      const engineers = engineerByProject.get(pid)
+      const engineerText = engineers && engineers.length > 0 ? engineers.join('، ') : 'مفيش مهندس مخصص'
+      return {
+        text: `${info.label} — ${info.count} بند معلّق (المهندس: ${engineerText})`,
+        to: `/assignments?project=${pid}`,
+      }
+    })
+    if (sorted.length > 8) {
+      items.push({ text: `+ ${sorted.length - 8} مشروع تاني فيهم بنود معلّقة`, to: '/projects-overview' })
+    }
+    setAttention(items)
+
     setActions([
       { to: '/users', label: 'المستخدمون' },
       { to: '/projects-overview', label: 'نظرة عامة على المشاريع' },
