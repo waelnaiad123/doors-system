@@ -285,7 +285,7 @@ tr:hover td { background: var(--bg); }
   color: var(--dash-ink-deep); line-height: 1;
 }
 .dash-stat .value.alert { color: var(--danger); }
-.dash-stat .value.warn { color: var(--dash-accent); }
+.dash-stat .value.warn { color: var(--pending); }
 
 .dash-section-title {
   font-size: 13px; font-weight: 700; color: var(--muted);
