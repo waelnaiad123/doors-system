@@ -3,16 +3,15 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
+import { cairoTodayStr, cairoHour } from '../lib/cairoTime'
 
 function todayStr() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return cairoTodayStr()
 }
 
 // النهاردة تفضل متاحة للاختيار لحد الساعة 8 بالليل، حتى لو اتسجل عليها تركيب جزئي بالفعل
 function isTodayStillOpen() {
-  return new Date().getHours() < 20
+  return cairoHour() < 20
 }
 
 export default function TechnicianDaily() {
