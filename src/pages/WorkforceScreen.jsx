@@ -2,16 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
-
-function todayStr() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+import { cairoTodayStr, cairoHour } from '../lib/cairoTime'
 
 export default function WorkforceScreen() {
   const { profile } = useAuth()
-  const [date, setDate] = useState(todayStr())
+  const [date, setDate] = useState(cairoTodayStr())
   const [projects, setProjects] = useState([])
   const [entries, setEntries] = useState({})
   const [loading, setLoading] = useState(true)
@@ -19,7 +14,7 @@ export default function WorkforceScreen() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const isLocked = profile.role === 'supervisor' && new Date().getHours() >= 16
+  const isLocked = profile.role === 'supervisor' && cairoHour() >= 16
 
   useEffect(() => { loadProjects() }, [])
   useEffect(() => { if (projects.length > 0) loadEntries() }, [date, projects]) // eslint-disable-line
