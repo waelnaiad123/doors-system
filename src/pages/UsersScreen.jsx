@@ -31,7 +31,10 @@ export default function UsersScreen() {
   async function loadUsers() {
     setLoading(true)
     setError('')
-    const { data, error } = await supabase.from('profiles').select('*').order('full_name')
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, profiles_private(phone, email)')
+      .order('full_name')
     if (error) setError(error.message)
     setUsers(data || [])
     setLoading(false)
@@ -174,7 +177,7 @@ export default function UsersScreen() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.full_name}</td>
-                    <td style={{ fontSize: 12.5 }}>{u.email || '—'}</td>
+                    <td style={{ fontSize: 12.5 }}>{u.profiles_private?.email || '—'}</td>
                     <td>
                       <select value={u.role} disabled={busyId === u.id || u.role === 'admin'}
                         onChange={(e) => updateField(u, 'role', e.target.value)}>
