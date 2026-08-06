@@ -18,8 +18,30 @@ export default function ReminderBanner() {
   useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
   useEffect(() => {
     if (!profile) return
-    const interval = setInterval(load, 20000)
-    return () => clearInterval(interval)
+    let interval = null
+    function start() {
+      if (interval) return
+      interval = setInterval(load, 20000)
+    }
+    function stop() {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        load() // تحديث فوري لحظة رجوع المستخدم للشاشة، بدل ما يستنى لحد 20 ثانية
+        start()
+      } else {
+        stop() // إيقاف مؤقت بس لو الشاشة مش قدام المستخدم أصلًا - الفاصل الزمني نفسه (20 ثانية) متغيرش
+      }
+    }
+    if (document.visibilityState === 'visible') start()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [profile?.id]) // eslint-disable-line
 
   async function loadEngineerOnboarding() {
