@@ -210,6 +210,11 @@ export default function Projects() {
             value={q} onChange={(e) => setQ(e.target.value)}
           />
         </div>
+        {rows.length >= 200 && (
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: -4, marginBottom: 10 }}>
+            ظاهر أول 200 مشروع بس. لو مش لاقي اللي بتدور عليه، استخدم البحث لتضييق النتائج.
+          </p>
+        )}
 
         {loading ? (
           <p style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>
