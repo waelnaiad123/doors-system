@@ -11,6 +11,16 @@ const STATUS_LABEL = {
   approved: 'معتمد نهائيًا',
   rejected: 'مرفوض',
 }
+
+// لو المشرف نفسه هو اللي سجّل التركيب، مفيش خطوة "اعتماد مشرف" فعليًا -
+// بتروح لاعتماد المهندس مباشرة، فالتسمية لازم توضح ده بدل ما تقول
+// "بانتظار اعتماد المشرف" وهو نفسه المشرف اللي مش هيعتمدها.
+function installLabel(rec) {
+  if (rec.status === 'pending_review' && rec.technician_role === 'supervisor') {
+    return 'بانتظار اعتماد المهندس'
+  }
+  return STATUS_LABEL[rec.status]
+}
 const STATUS_BADGE = {
   pending_review: 'badge-pending',
   supervisor_approved: 'badge-pending',
@@ -388,7 +398,7 @@ export default function ApprovalScreen() {
                             >
                               {r.installed_at === todayStr() ? 'اليوم' : r.installed_at}
                             </span>
-                            <span className={`badge ${STATUS_BADGE[r.status]}`} style={{ fontSize: 11 }}>{STATUS_LABEL[r.status]}</span>
+                            <span className={`badge ${STATUS_BADGE[r.status]}`} style={{ fontSize: 11 }}>{installLabel(r)}</span>
                             <span className="badge badge-empty" style={{ fontSize: 11 }}>{r.points_earned} نقطة</span>
                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.technician_name}</span>
                             {eligible && (
