@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { REPORT_COLUMNS, emptyColumnTotals } from '../lib/reportColumns'
+import { useAuth } from '../AuthContext'
 
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -243,6 +244,7 @@ function InstallationCardView({ project, period, month, year, start, data, names
 }
 
 export default function InstallationCard() {
+  const { profile } = useAuth()
   const today = new Date()
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
@@ -266,11 +268,22 @@ export default function InstallationCard() {
   useEffect(() => { if (projectId) loadProjectData() }, [projectId]) // eslint-disable-line
 
   async function loadProjects() {
-    const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('projects').select('id, project_name, project_number, client_name, po_number').order('project_name').range(from, to)
+    if (profile.role === 'admin' || profile.is_installations_manager) {
+      const { data, error } = await fetchAllRows((from, to) =>
+        supabase.from('projects').select('id, project_name, project_number, client_name, po_number').order('project_name').range(from, to)
+      )
+      if (error) setError(error.message)
+      setProjects(data || [])
+      return
+    }
+    const { data: myAssigns, error: assignErr } = await fetchAllRows((from, to) =>
+      supabase.from('project_assignments').select('project_id, projects(id, project_name, project_number, client_name, po_number)')
+        .eq('user_id', profile.id).eq('is_active', true).range(from, to)
     )
-    if (error) setError(error.message)
-    setProjects(data || [])
+    if (assignErr) { setError(assignErr.message); return }
+    const seen = new Map()
+    ;(myAssigns || []).forEach((a) => { if (a.projects) seen.set(a.project_id, a.projects) })
+    setProjects(Array.from(seen.values()).sort((a, b) => a.project_name.localeCompare(b.project_name)))
   }
 
   async function loadProjectData() {
@@ -349,9 +362,7 @@ export default function InstallationCard() {
         return
       }
 
-      const allProjects = projects.length > 0 ? projects : (await fetchAllRows((from, to) =>
-        supabase.from('projects').select('id, project_name, project_number, client_name, po_number').range(from, to)
-      )).data || []
+      const allProjects = projects
 
       const cards = []
       for (const pid of qualifyingIds) {
