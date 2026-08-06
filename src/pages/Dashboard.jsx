@@ -77,31 +77,53 @@ export default function Dashboard() {
   }
 
   async function loadAdminLike() {
-    const [{ count: projectsCount }, { count: usersCount }, { data: pendingItems }, { data: pendingInstalls }] = await Promise.all([
+    const [
+      { count: projectsCount }, { count: usersCount }, { data: pendingItems },
+      { data: pendingInstalls }, { data: pendingDeliveries }, { data: pendingNotes },
+    ] = await Promise.all([
       supabase.from('projects').select('id', { count: 'exact', head: true }),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true),
       fetchAllRows((from, to) => supabase.from('door_items').select('id').eq('status', 'pending_review').range(from, to)),
-      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('status').in('status', ['pending_review', 'supervisor_approved']).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name, project_number, status').in('status', ['pending_review', 'supervisor_approved']).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name, project_number, status').eq('status', 'pending_review').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('daily_project_notes').select('project_id, projects(project_name, project_number)').eq('status', 'pending_review').range(from, to)),
     ])
     setStats([
       { to: '/projects', label: 'إجمالي المشاريع', value: projectsCount ?? '—' },
       { to: '/users', label: 'مستخدمون نشطون', value: usersCount ?? '—' },
       { to: '/projects', label: 'بنود بانتظار الاعتماد', value: (pendingItems || []).length, tone: (pendingItems || []).length ? 'warn' : undefined },
       { to: '/approval', label: 'تركيبات بانتظار الاعتماد', value: (pendingInstalls || []).length, tone: (pendingInstalls || []).length ? 'warn' : undefined },
+      { to: '/approval', label: 'تسليمات بانتظار الاعتماد', value: (pendingDeliveries || []).length, tone: (pendingDeliveries || []).length ? 'warn' : undefined },
+      { to: '/approval', label: 'ملاحظات بانتظار الاعتماد', value: (pendingNotes || []).length, tone: (pendingNotes || []).length ? 'warn' : undefined },
     ])
 
-    // تفصيل: كام بند معلّق في كل مشروع، ومين المهندس المسؤول عنه
+    // تفصيل: كام بند/تركيب/تسليم/ملاحظة معلّقة في كل مشروع، ومين المهندس المسؤول عنه
     const { data: doorsWithPending } = await fetchAllRows((from, to) =>
       supabase.from('doors').select('project_id, projects(project_name, project_number), door_items(status)').range(from, to)
     )
-    const countByProject = new Map() // project_id -> { name, count }
+    const countByProject = new Map() // project_id -> { label, itemCount, installCount, deliveryCount, noteCount }
+    function ensureProject(pid, label) {
+      if (!countByProject.has(pid)) countByProject.set(pid, { label, itemCount: 0, installCount: 0, deliveryCount: 0, noteCount: 0 })
+      return countByProject.get(pid)
+    }
     ;(doorsWithPending || []).forEach((d) => {
       const pendingCount = (d.door_items || []).filter((it) => it.status === 'pending_review').length
       if (pendingCount === 0) return
-      const key = d.project_id
       const label = d.projects ? `${d.projects.project_number} — ${d.projects.project_name}` : 'مشروع'
-      if (!countByProject.has(key)) countByProject.set(key, { label, count: 0 })
-      countByProject.get(key).count += pendingCount
+      ensureProject(d.project_id, label).itemCount += pendingCount
+    })
+    ;(pendingInstalls || []).forEach((r) => {
+      const label = r.project_number ? `${r.project_number} — ${r.project_name}` : (r.project_name || 'مشروع')
+      ensureProject(r.project_id, label).installCount += 1
+    })
+    ;(pendingDeliveries || []).forEach((r) => {
+      const label = r.project_number ? `${r.project_number} — ${r.project_name}` : (r.project_name || 'مشروع')
+      ensureProject(r.project_id, label).deliveryCount += 1
+    })
+    ;(pendingNotes || []).forEach((n) => {
+      const proj = n.projects
+      const label = proj?.project_number ? `${proj.project_number} — ${proj.project_name}` : (proj?.project_name || 'مشروع')
+      ensureProject(n.project_id, label).noteCount += 1
     })
 
     const projectIdsWithPending = [...countByProject.keys()]
@@ -119,17 +141,26 @@ export default function Dashboard() {
       })
     }
 
-    const sorted = [...countByProject.entries()].sort((a, b) => b[1].count - a[1].count)
+    const sorted = [...countByProject.entries()].sort((a, b) => {
+      const totalA = a[1].itemCount + a[1].installCount + a[1].deliveryCount + a[1].noteCount
+      const totalB = b[1].itemCount + b[1].installCount + b[1].deliveryCount + b[1].noteCount
+      return totalB - totalA
+    })
     const items = sorted.slice(0, 8).map(([pid, info]) => {
       const engineers = engineerByProject.get(pid)
       const engineerText = engineers && engineers.length > 0 ? engineers.join('، ') : 'مفيش مهندس مخصص'
+      const parts = []
+      if (info.itemCount > 0) parts.push(`${info.itemCount} بند معلّق`)
+      if (info.installCount > 0) parts.push(`${info.installCount} تركيب بانتظار الاعتماد`)
+      if (info.deliveryCount > 0) parts.push(`${info.deliveryCount} تسليم بانتظار الاعتماد`)
+      if (info.noteCount > 0) parts.push(`${info.noteCount} ملاحظة بانتظار الاعتماد`)
       return {
-        text: `${info.label} — ${info.count} بند معلّق (المهندس: ${engineerText})`,
+        text: `${info.label} — ${parts.join('، ')} (المهندس: ${engineerText})`,
         to: `/assignments?project=${pid}`,
       }
     })
     if (sorted.length > 8) {
-      items.push({ text: `+ ${sorted.length - 8} مشروع تاني فيهم بنود معلّقة`, to: '/projects-overview' })
+      items.push({ text: `+ ${sorted.length - 8} مشروع تاني فيهم بنود أو موافقات معلّقة`, to: '/projects-overview' })
     }
     setAttention(items)
 
