@@ -5,6 +5,12 @@ import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 import ProgressRing from '../components/ProgressRing'
 
+function todayStr() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 const STATUS_LABEL = {
   pending_review: 'بانتظار اعتماد المشرف',
   supervisor_approved: 'معتمد من المشرف - بانتظار المهندس',
