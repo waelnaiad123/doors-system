@@ -72,12 +72,12 @@ export default function ProjectAssignments() {
     setAssignments((aData || []).map((a) => ({ ...a, doorIds: scopeMap.get(a.id) || [] })))
   }
 
-  const filteredDoors = useMemo(() => {
-    const list = doorSearch.trim()
+  const matchedDoors = useMemo(() => (
+    doorSearch.trim()
       ? doors.filter((d) => d.door_code.toLowerCase().includes(doorSearch.toLowerCase()))
       : doors
-    return list.slice(0, 100)
-  }, [doors, doorSearch])
+  ), [doors, doorSearch])
+  const filteredDoors = useMemo(() => matchedDoors.slice(0, 100), [matchedDoors])
 
   function toggleDoorSel(id) {
     setSelectedDoors((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -208,6 +208,11 @@ export default function ProjectAssignments() {
                   onChange={(e) => setDoorSearch(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
                 <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
                   {filteredDoors.length === 0 && <p style={{ fontSize: 13, color: 'var(--muted)' }}>لا توجد أبواب مطابقة.</p>}
+                  {matchedDoors.length > 100 && (
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                      ظاهر أول 100 باب بس من {matchedDoors.length} مطابق. ضيّق البحث عشان تشوف الباقي.
+                    </p>
+                  )}
                   {filteredDoors.map((d) => (
                     <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px' }}>
                       <input type="checkbox" checked={selectedDoors.has(d.id)} onChange={() => toggleDoorSel(d.id)} style={{ width: 20, height: 20 }} />
