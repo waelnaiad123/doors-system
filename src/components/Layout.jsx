@@ -55,6 +55,7 @@ const NAV_BY_ROLE = {
     { to: '/monthly-productivity', label: 'تقرير إنتاجية الشهر' },
     { to: '/productivity-summary', label: 'ملخص إنتاجية المهندسين', requiresFlag: 'is_installations_manager' },
     { to: '/projects-overview', label: 'نظرة عامة على المشاريع', requiresFlag: 'is_installations_manager' },
+    { to: '/users', label: 'المستخدمون', requiresFlag: 'is_installations_manager' },
   ],
   delivery_entry: [
     { to: '/dashboard', label: 'الرئيسية' },
