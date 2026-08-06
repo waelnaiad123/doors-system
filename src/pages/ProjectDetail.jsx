@@ -12,6 +12,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null)
   const [itemTypes, setItemTypes] = useState([])
   const [doors, setDoors] = useState([])
+  const [variantPoints, setVariantPoints] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -24,7 +25,7 @@ export default function ProjectDetail() {
   async function loadAll() {
     setLoading(true)
     setError('')
-    const [projRes, typesRes, doorsRes] = await Promise.all([
+    const [projRes, typesRes, doorsRes, variantRes] = await Promise.all([
       supabase.from('projects').select('*').eq('id', projectId).single(),
       supabase.from('item_types').select('*').order('display_order'),
       fetchAllRows((from, to) =>
@@ -35,12 +36,14 @@ export default function ProjectDetail() {
           .order('door_code')
           .range(from, to)
       ),
+      supabase.from('door_leaf_variant_points').select('variant, points'),
     ])
     const firstError = projRes.error || typesRes.error || doorsRes.error
     if (firstError) setError(firstError.message)
     setProject(projRes.data || null)
     setItemTypes(typesRes.data || [])
     setDoors(doorsRes.data || [])
+    setVariantPoints(Object.fromEntries((variantRes.data || []).map((v) => [v.variant, v.points])))
     setLoading(false)
   }
 
@@ -784,7 +787,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   }
 
   async function performVariantChange(doorItem, variant) {
-    const points = variant === 'large' ? 50 : variant === 'sliding' ? 100 : null
+    const points = variant === 'regular' ? null : (variantPoints[variant] ?? null)
     const { error } = await supabase
       .from('door_items')
       .update({ variant: variant === 'regular' ? null : variant, points_override: points })
