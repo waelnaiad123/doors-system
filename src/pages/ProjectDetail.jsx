@@ -6,6 +6,10 @@ import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 
+// قيم احتياطية لو جدول door_leaf_variant_points مش موجود أو الاستعلام فشل لأي
+// سبب - عشان النقاط متطلعش صفر بالغلط، بترجع لنفس القيم المعروفة زي الأول.
+const FALLBACK_VARIANT_POINTS = { large: 50, sliding: 100 }
+
 export default function ProjectDetail() {
   const { projectId } = useParams()
   const { profile } = useAuth()
@@ -787,7 +791,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
   }
 
   async function performVariantChange(doorItem, variant) {
-    const points = variant === 'regular' ? null : (variantPoints[variant] ?? null)
+    const points = variant === 'regular' ? null : (variantPoints[variant] ?? FALLBACK_VARIANT_POINTS[variant] ?? null)
     const { error } = await supabase
       .from('door_items')
       .update({ variant: variant === 'regular' ? null : variant, points_override: points })
