@@ -46,9 +46,10 @@ function RequireAuth({ children }) {
   return children
 }
 
-function RequireRole({ roles, children }) {
+function RequireRole({ roles, allowFlag, children }) {
   const { profile } = useAuth()
-  if (!roles.includes(profile.role)) {
+  const allowed = roles.includes(profile.role) || (allowFlag && !!profile[allowFlag])
+  if (!allowed) {
     return <Navigate to={DEFAULT_ROUTE_BY_ROLE[profile.role] || '/login'} replace />
   }
   return children
@@ -131,7 +132,7 @@ export default function App() {
             />
             <Route
               path="users"
-              element={<RequireRole roles={['admin']}><UsersScreen /></RequireRole>}
+              element={<RequireRole roles={['admin']} allowFlag="is_installations_manager"><UsersScreen /></RequireRole>}
             />
             <Route
               path="technician"
