@@ -1,27 +1,27 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Layout from './components/Layout'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import UpdatePassword from './pages/UpdatePassword'
-import Projects from './pages/Projects'
-import ProjectDetail from './pages/ProjectDetail'
-import ComingSoon from './pages/ComingSoon'
-import TechnicianDaily from './pages/TechnicianDaily'
-import ApprovalScreen from './pages/ApprovalScreen'
-import ProjectAssignments from './pages/ProjectAssignments'
-import DeliveryScreen from './pages/DeliveryScreen'
-import UsersScreen from './pages/UsersScreen'
-import ReportsScreen from './pages/ReportsScreen'
-import WorkforceScreen from './pages/WorkforceScreen'
-import ProjectStatusReport from './pages/ProjectStatusReport'
-import InstallationCard from './pages/InstallationCard'
-import AdditionalWorks from './pages/AdditionalWorks'
-import MonthlyProductivity from './pages/MonthlyProductivity'
-import AdminProductivitySummary from './pages/AdminProductivitySummary'
-import ProjectsOverview from './pages/ProjectsOverview'
-import BackupExport from './pages/BackupExport'
+
+const Login = React.lazy(() => import('./pages/Login'))
+const Dashboard = React.lazy(() => import('./pages/Dashboard'))
+const UpdatePassword = React.lazy(() => import('./pages/UpdatePassword'))
+const Projects = React.lazy(() => import('./pages/Projects'))
+const ProjectDetail = React.lazy(() => import('./pages/ProjectDetail'))
+const TechnicianDaily = React.lazy(() => import('./pages/TechnicianDaily'))
+const ApprovalScreen = React.lazy(() => import('./pages/ApprovalScreen'))
+const ProjectAssignments = React.lazy(() => import('./pages/ProjectAssignments'))
+const DeliveryScreen = React.lazy(() => import('./pages/DeliveryScreen'))
+const UsersScreen = React.lazy(() => import('./pages/UsersScreen'))
+const ReportsScreen = React.lazy(() => import('./pages/ReportsScreen'))
+const WorkforceScreen = React.lazy(() => import('./pages/WorkforceScreen'))
+const ProjectStatusReport = React.lazy(() => import('./pages/ProjectStatusReport'))
+const InstallationCard = React.lazy(() => import('./pages/InstallationCard'))
+const AdditionalWorks = React.lazy(() => import('./pages/AdditionalWorks'))
+const MonthlyProductivity = React.lazy(() => import('./pages/MonthlyProductivity'))
+const AdminProductivitySummary = React.lazy(() => import('./pages/AdminProductivitySummary'))
+const ProjectsOverview = React.lazy(() => import('./pages/ProjectsOverview'))
+const BackupExport = React.lazy(() => import('./pages/BackupExport'))
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/dashboard',
@@ -68,92 +68,100 @@ function LoginRoute() {
   return <Login />
 }
 
+// شاشة انتظار بسيطة تظهر بس وقت تحميل كود شاشة جديدة أول مرة في الجلسة -
+// نفس نص "جارِ التحميل..." المستخدم أصلًا في RequireAuth عشان يبقى متسق.
+function RouteFallback() {
+  return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>جارِ التحميل...</div>
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginRoute />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <Layout />
-              </RequireAuth>
-            }
-          >
-            <Route index element={<HomeRedirect />} />
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/login" element={<LoginRoute />} />
+            <Route path="/update-password" element={<UpdatePassword />} />
+            <Route
+              path="/"
+              element={
+                <RequireAuth>
+                  <Layout />
+                </RequireAuth>
+              }
+            >
+              <Route index element={<HomeRedirect />} />
 
-            <Route
-              path="projects"
-              element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><Projects /></RequireRole>}
-            />
-            <Route
-              path="projects/:projectId"
-              element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><ProjectDetail /></RequireRole>}
-            />
-            <Route
-              path="additional-works"
-              element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
-            />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route
-              path="backup"
-              element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
-            />
-            <Route
-              path="projects-overview"
-              element={<RequireRole roles={['admin', 'engineer']}><ProjectsOverview /></RequireRole>}
-            />
-            <Route
-              path="productivity-summary"
-              element={<RequireRole roles={['admin', 'engineer']}><AdminProductivitySummary /></RequireRole>}
-            />
-            <Route
-              path="monthly-productivity"
-              element={<RequireRole roles={['admin', 'engineer']}><MonthlyProductivity /></RequireRole>}
-            />
-            <Route
-              path="installation-card"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><InstallationCard /></RequireRole>}
-            />
-            <Route
-              path="project-status"
-              element={<RequireRole roles={['admin', 'data_entry', 'technician', 'supervisor', 'engineer', 'delivery_entry']}><ProjectStatusReport /></RequireRole>}
-            />
-            <Route
-              path="workforce"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><WorkforceScreen /></RequireRole>}
-            />
-            <Route
-              path="assignments"
-              element={<RequireRole roles={['admin', 'engineer', 'data_entry']}><ProjectAssignments /></RequireRole>}
-            />
-            <Route
-              path="users"
-              element={<RequireRole roles={['admin']} allowFlag="is_installations_manager"><UsersScreen /></RequireRole>}
-            />
-            <Route
-              path="technician"
-              element={<RequireRole roles={['admin', 'technician', 'supervisor']}><TechnicianDaily /></RequireRole>}
-            />
-            <Route
-              path="approval"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ApprovalScreen /></RequireRole>}
-            />
-            <Route
-              path="delivery"
-              element={<RequireRole roles={['admin', 'delivery_entry']}><DeliveryScreen /></RequireRole>}
-            />
-            <Route
-              path="reports"
-              element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ReportsScreen /></RequireRole>}
-            />
+              <Route
+                path="projects"
+                element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><Projects /></RequireRole>}
+              />
+              <Route
+                path="projects/:projectId"
+                element={<RequireRole roles={['admin', 'data_entry', 'engineer']}><ProjectDetail /></RequireRole>}
+              />
+              <Route
+                path="additional-works"
+                element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
+              />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route
+                path="backup"
+                element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
+              />
+              <Route
+                path="projects-overview"
+                element={<RequireRole roles={['admin', 'engineer']}><ProjectsOverview /></RequireRole>}
+              />
+              <Route
+                path="productivity-summary"
+                element={<RequireRole roles={['admin', 'engineer']}><AdminProductivitySummary /></RequireRole>}
+              />
+              <Route
+                path="monthly-productivity"
+                element={<RequireRole roles={['admin', 'engineer']}><MonthlyProductivity /></RequireRole>}
+              />
+              <Route
+                path="installation-card"
+                element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><InstallationCard /></RequireRole>}
+              />
+              <Route
+                path="project-status"
+                element={<RequireRole roles={['admin', 'data_entry', 'technician', 'supervisor', 'engineer', 'delivery_entry']}><ProjectStatusReport /></RequireRole>}
+              />
+              <Route
+                path="workforce"
+                element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><WorkforceScreen /></RequireRole>}
+              />
+              <Route
+                path="assignments"
+                element={<RequireRole roles={['admin', 'engineer', 'data_entry']}><ProjectAssignments /></RequireRole>}
+              />
+              <Route
+                path="users"
+                element={<RequireRole roles={['admin']} allowFlag="is_installations_manager"><UsersScreen /></RequireRole>}
+              />
+              <Route
+                path="technician"
+                element={<RequireRole roles={['admin', 'technician', 'supervisor']}><TechnicianDaily /></RequireRole>}
+              />
+              <Route
+                path="approval"
+                element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ApprovalScreen /></RequireRole>}
+              />
+              <Route
+                path="delivery"
+                element={<RequireRole roles={['admin', 'delivery_entry']}><DeliveryScreen /></RequireRole>}
+              />
+              <Route
+                path="reports"
+                element={<RequireRole roles={['admin', 'supervisor', 'engineer']}><ReportsScreen /></RequireRole>}
+              />
 
-            <Route path="*" element={<HomeRedirect />} />
-          </Route>
-        </Routes>
+              <Route path="*" element={<HomeRedirect />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   )
