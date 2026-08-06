@@ -211,13 +211,26 @@ export default function Dashboard() {
       const hasSupervisor = new Set((teamAssigns || []).filter((t) => t.role === 'supervisor').map((t) => t.project_id))
       const hasDelivery = new Set((teamAssigns || []).filter((t) => t.role === 'delivery_entry').map((t) => t.project_id))
 
+      const installProjectIds = new Set((pendingInstalls || []).map((r) => r.project_id))
+      const noteProjectIds = new Set((pendingNotes || []).map((n) => n.project_id))
+      const deliveryProjectIds = new Set((pendingDeliveries || []).map((r) => r.project_id))
+
       const items = []
       const seenNames = new Map()
       ;(myAssigns || []).forEach((a) => { if (a.projects) seenNames.set(a.project_id, a.projects.project_name) })
-      const allRelevant = new Set([...pendingProjectIds, ...projectIds.filter((pid) => !hasSupervisor.has(pid) || !hasDelivery.has(pid))])
+      const allRelevant = new Set([
+        ...pendingProjectIds,
+        ...installProjectIds,
+        ...noteProjectIds,
+        ...deliveryProjectIds,
+        ...projectIds.filter((pid) => !hasSupervisor.has(pid) || !hasDelivery.has(pid)),
+      ])
       allRelevant.forEach((pid) => {
         const reasons = []
         if (pendingProjectIds.has(pid)) reasons.push('اعتماد البنود المعلّقة')
+        if (installProjectIds.has(pid)) reasons.push('اعتماد التركيبات المعلّقة')
+        if (noteProjectIds.has(pid)) reasons.push('اعتماد الملاحظات المعلّقة')
+        if (deliveryProjectIds.has(pid)) reasons.push('اعتماد التسليمات المعلّقة')
         if (!hasSupervisor.has(pid)) reasons.push('تخصيص مشرف')
         if (!hasDelivery.has(pid)) reasons.push('تخصيص مدخل بيانات تسليمات')
         items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to: `/assignments?project=${pid}` })
@@ -241,7 +254,7 @@ export default function Dashboard() {
 
     const [{ data: unenteredAll }, { data: pendingInstallsAll }] = await Promise.all([
       fetchAllRows((from, to) => supabase.from('v_unentered_workforce').select('*').range(from, to)),
-      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, status, technician_role').in('status', ['pending_review']).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name, status, technician_role').in('status', ['pending_review']).range(from, to)),
     ])
     const unentered = (unenteredAll || []).filter((p) => projectIds.includes(p.project_id))
     const myPending = (pendingInstallsAll || []).filter((r) => projectIds.includes(r.project_id) && r.technician_role !== 'supervisor')
@@ -249,9 +262,23 @@ export default function Dashboard() {
       { to: '/workforce', label: 'مشاريع محتاجة حصر أفراد اليوم', value: unentered.length, tone: unentered.length ? 'warn' : undefined },
       { to: '/approval', label: 'تركيبات بانتظار اعتمادي', value: myPending.length, tone: myPending.length ? 'warn' : undefined },
     ])
-    setAttention(
-      unentered.slice(0, 6).map((p) => ({ text: `"${p.project_name}" لسه محتاج حصر أفراد أو تسجيل تركيب اليوم`, to: '/workforce' }))
-    )
+
+    const nameByProject = new Map()
+    unentered.forEach((p) => nameByProject.set(p.project_id, p.project_name))
+    myPending.forEach((r) => { if (!nameByProject.has(r.project_id)) nameByProject.set(r.project_id, r.project_name) })
+    const unenteredIds = new Set(unentered.map((p) => p.project_id))
+    const pendingIds = new Set(myPending.map((r) => r.project_id))
+    const allRelevant = [...new Set([...unenteredIds, ...pendingIds])]
+    const attentionItems = allRelevant.map((pid) => {
+      const reasons = []
+      if (unenteredIds.has(pid)) reasons.push('حصر أفراد أو تسجيل تركيب اليوم')
+      if (pendingIds.has(pid)) reasons.push('اعتماد تركيبات بانتظارك')
+      return {
+        text: `"${nameByProject.get(pid) || ''}" محتاج: ${reasons.join('، ')}`,
+        to: pendingIds.has(pid) ? '/approval' : '/workforce',
+      }
+    })
+    setAttention(attentionItems.slice(0, 6))
     setActions([
       { to: '/workforce', label: 'حصر الأفراد' },
       { to: '/technician', label: 'تسجيل تركيب' },
