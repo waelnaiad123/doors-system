@@ -50,7 +50,7 @@ export default function TechnicianDaily() {
     const { data, error } = await fetchAllRows((from, to) =>
       supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
     )
-    if (error) { setError(error.message); return }
+    if (error) { setError(`تحميل المشاريع اللي لسه ما اتلمستش: ${error.message}`); return }
     const touched = new Set((data || []).map((r) => r.project_id))
     setUntouchedProjectIds(new Set(projectIds.filter((id) => !touched.has(id))))
   }
@@ -60,12 +60,12 @@ export default function TechnicianDaily() {
     const { data, error } = await supabase
       .from('daily_workforce').select('project_id, headcount')
       .eq('work_date', todayStr()).gt('headcount', 0).in('project_id', projectIds)
-    if (error) { setError(error.message); return }
+    if (error) { setError(`تحميل تذكير حصر الأفراد: ${error.message}`); return }
     setWorkforceToday(data || [])
     const { data: notesData, error: notesErr } = await supabase
       .from('daily_project_notes').select('project_id')
       .eq('note_date', todayStr()).in('project_id', projectIds)
-    if (notesErr) { setError(notesErr.message); return }
+    if (notesErr) { setError(`تحميل ملاحظات اليوم: ${notesErr.message}`); return }
     setNotesToday(notesData || [])
   }
 
@@ -78,12 +78,12 @@ export default function TechnicianDaily() {
     const { data: wfRows, error: wfErr } = await fetchAllRows((from, to) =>
       supabase.from('daily_workforce').select('work_date').eq('project_id', projectId).gt('headcount', 0).range(from, to)
     )
-    if (wfErr) { setError(wfErr.message); setLoadingDates(false); return }
+    if (wfErr) { setError(`تحميل تواريخ حصر الأفراد المتاحة: ${wfErr.message}`); setLoadingDates(false); return }
     // نجيب تواريخ التركيب المسجّلة فعليًا على هذا المشروع تحديدًا (أي حالة، حتى المعلّق يكفي إنه "متسجل")
     const { data: instForProject, error: instProjErr } = await fetchAllRows((from, to) =>
       supabase.from('v_installations_detail').select('installed_at').eq('project_id', projectId).range(from, to)
     )
-    if (instProjErr) { setError(instProjErr.message); setLoadingDates(false); return }
+    if (instProjErr) { setError(`تحميل تواريخ التركيبات على المشروع: ${instProjErr.message}`); setLoadingDates(false); return }
 
     const installedDates = new Set((instForProject || []).map((r) => r.installed_at))
     const workforceDates = [...new Set((wfRows || []).map((r) => r.work_date))]
@@ -109,7 +109,7 @@ export default function TechnicianDaily() {
       .from('daily_project_notes').select('*')
       .eq('project_id', projectId).eq('note_date', workDate).eq('created_by', profile.id)
       .maybeSingle()
-    if (error) { setError(error.message); return }
+    if (error) { setError(`تحميل ملاحظة اليوم عن المشروع: ${error.message}`); return }
     if (data) {
       setInstallNotes(data.installation_notes || '')
       setNonExecReason(data.non_execution_reason || '')
@@ -133,7 +133,7 @@ export default function TechnicianDaily() {
         non_execution_reason: nonExecReason.trim() || null,
       }, { onConflict: 'project_id,note_date,created_by' })
     setSavingNote(false)
-    if (error) { setError(error.message); return }
+    if (error) { setError(`حفظ ملاحظات اليوم: ${error.message}`); return }
     setNotice('تم حفظ الملاحظات.')
     await Promise.all([loadNote(), loadWorkforceReminder()])
   }
@@ -142,7 +142,7 @@ export default function TechnicianDaily() {
     setLoadingProjects(true)
     const { data, error } = await supabase
       .from('projects').select('id, project_name, project_number').order('project_name')
-    if (error) setError(error.message)
+    if (error) setError(`تحميل قائمة المشاريع: ${error.message}`)
     setProjects(data || [])
     setLoadingProjects(false)
   }
@@ -155,7 +155,7 @@ export default function TechnicianDaily() {
       if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
       return q.range(from, to)
     })
-    if (error) setError(error.message)
+    if (error) setError(`تحميل البنود المعلّقة للمشروع المختار: ${error.message}`)
     setPending(data || [])
     setSelected(new Set())
     setLoadingPending(false)
@@ -170,7 +170,8 @@ export default function TechnicianDaily() {
       .in('project_id', projectIds)
       .eq('installed_at', todayStr())
       .order('door_code')
-    if (!error) setToday(data || [])
+    if (error) { setError(`تحميل تركيبات الفريق اليوم: ${error.message}`); return }
+    setToday(data || [])
   }
 
   const groupedByDoor = useMemo(() => {
@@ -231,9 +232,11 @@ export default function TechnicianDaily() {
       // لو المسجّل مشرف، اعتماده بيروح للمهندس مباشرة (مش لمشرف زميله) - installation_required_approver_roles
       const nextApprover = profile.role === 'supervisor' ? 'المهندس' : 'المشرف'
       setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد ${nextApprover}.`)
-      await Promise.all([loadPending(), loadToday(), loadWorkforceReminder(), loadEligibleDates()])
+      const refreshes = [loadToday(), loadWorkforceReminder()]
+      if (projectId) refreshes.push(loadPending(), loadEligibleDates())
+      await Promise.all(refreshes)
     } catch (e) {
-      setError(e.message)
+      setError(`تسجيل التركيب: ${e.message}`)
     } finally {
       setSubmitting(false)
     }
@@ -242,8 +245,13 @@ export default function TechnicianDaily() {
   async function handleUndo(installationId) {
     setError('')
     const { error } = await supabase.from('installation_records').delete().eq('id', installationId)
-    if (error) { setError(error.message); return }
-    await Promise.all([loadPending(), loadToday(), loadWorkforceReminder(), loadEligibleDates()])
+    if (error) { setError(`التراجع عن التركيب نفسه فشل: ${error.message}`); return }
+    // loadPending وloadEligibleDates بيفلتروا بـ projectId المختار في القائمة -
+    // لو محدش مشروع مختار (زي لما "تراجع" بيتدوس من جدول "كل الفريق" اللي
+    // بيوري كل المشاريع مع بعض)، تشغيلهم هيبعت قيمة فاضية لعمود uuid ويرمي خطأ
+    const refreshes = [loadToday(), loadWorkforceReminder()]
+    if (projectId) refreshes.push(loadPending(), loadEligibleDates())
+    await Promise.all(refreshes)
   }
 
   return (
