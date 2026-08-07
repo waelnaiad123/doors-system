@@ -19,6 +19,7 @@ export default function MonthlyProductivity() {
   const [projects, setProjects] = useState([]) // {id, project_name, project_number, supervisor_name}
   const [itemTotals, setItemTotals] = useState({}) // project_id -> {columns, points}
   const [installedTotals, setInstalledTotals] = useState({}) // project_id -> {columns, points} (through day 20)
+  const [workforceTotals, setWorkforceTotals] = useState({}) // project_id -> {allTime, thisMonth} headcount
   const [productivityRows, setProductivityRows] = useState({}) // project_id -> row (this month)
   const [prevRows, setPrevRows] = useState({}) // project_id -> row (previous month)
   const [additionalWorks, setAdditionalWorks] = useState({}) // project_id -> total points
@@ -100,6 +101,8 @@ export default function MonthlyProductivity() {
 
       // 3) ما تم تركيبه واعتماده حتى يوم 20 من الشهر المطلوب
       const cutoff = toISO(year, month, 20)
+      const prevMonth = month === 1 ? 12 : month - 1
+      const prevYear = month === 1 ? year - 1 : year
       const { data: installs } = await fetchAllRows((from, to) =>
         supabase
           .from('v_installations_detail')
@@ -118,6 +121,29 @@ export default function MonthlyProductivity() {
       })
       setInstalledTotals(installedMap)
 
+      // 3.5) حصر الأفراد: إجمالي من بداية المشروع لغاية يوم 20 من الشهر المطلوب،
+      // وكمان إجمالي خلال الشهر بس (من يوم 21 الشهر السابق لغاية يوم 20 الحالي).
+      // بنجيب كل الصفوف لغاية يوم 20 مرة واحدة، وبنحسب المجموعين من نفس البيانات.
+      const periodStart = toISO(prevYear, prevMonth, 21)
+      const { data: wfRows, error: e9 } = await fetchAllRows((from, to) =>
+        supabase
+          .from('daily_workforce')
+          .select('project_id, work_date, headcount')
+          .in('project_id', projectIds).lte('work_date', cutoff)
+          .range(from, to)
+      )
+      if (e9) throw e9
+      const workforceMap = {}
+      projectIds.forEach((id) => { workforceMap[id] = { allTime: 0, thisMonth: 0 } })
+      ;(wfRows || []).forEach((r) => {
+        const bucket = workforceMap[r.project_id]
+        if (!bucket) return
+        const h = Number(r.headcount) || 0
+        bucket.allTime += h
+        if (r.work_date >= periodStart) bucket.thisMonth += h
+      })
+      setWorkforceTotals(workforceMap)
+
       // 4) صفوف تقرير الإنتاجية للشهر الحالي والشهر السابق
       const { data: thisMonthRows, error: e6 } = await supabase
         .from('monthly_productivity').select('*')
@@ -127,8 +153,6 @@ export default function MonthlyProductivity() {
       ;(thisMonthRows || []).forEach((r) => { thisMap[r.project_id] = r })
       setProductivityRows(thisMap)
 
-      const prevMonth = month === 1 ? 12 : month - 1
-      const prevYear = month === 1 ? year - 1 : year
       const { data: prevMonthRows, error: e7 } = await supabase
         .from('monthly_productivity').select('*')
         .eq('engineer_id', selectedEngineerId).eq('year', prevYear).eq('month', prevMonth).in('project_id', projectIds)
@@ -269,7 +293,8 @@ export default function MonthlyProductivity() {
               <table>
                 <thead>
                   <tr>
-                    <th>المشروع</th>
+                    <th className="print-proj-col">المشروع</th>
+                    <th>حصر الأفراد</th>
                     {REPORT_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
                     <th>إجمالي نقاط المشروع</th>
                     <th>نقاط مركبة حتى 20</th>
@@ -289,16 +314,19 @@ export default function MonthlyProductivity() {
                     const currentPoints = prevPoints + monthPoints
                     const addWork = additionalWorks[p.id] || 0
                     const locked = existing?.locked
+                    const workforce = workforceTotals[p.id] || { allTime: 0, thisMonth: 0 }
                     return (
                       <React.Fragment key={p.id}>
                         <tr style={{ fontWeight: 700 }}>
-                          <td>{p.project_number} — {p.project_name}</td>
+                          <td className="print-proj-col">{p.project_number} — {p.project_name}</td>
+                          <td title="إجمالي حصر الأفراد من بداية المشروع حتى يوم 20 من هذا الشهر">{workforce.allTime || ''}</td>
                           {REPORT_COLUMNS.map((c) => <td key={c.key}>{totals.columns[c.key] || ''}</td>)}
                           <td>{Math.round(totals.points)}</td>
                           <td colSpan={5}></td>
                         </tr>
                         <tr>
-                          <td style={{ fontSize: 11, color: 'var(--muted)' }}>منفّذ حتى 20 — مشرف: {p.supervisor_name}</td>
+                          <td className="print-proj-col" style={{ fontSize: 11, color: 'var(--muted)' }}>منفّذ حتى 20 — مشرف: {p.supervisor_name}</td>
+                          <td title="حصر الأفراد خلال الشهر بس (من يوم 21 الشهر السابق لغاية يوم 20 الحالي)">{workforce.thisMonth || ''}</td>
                           {REPORT_COLUMNS.map((c) => <td key={c.key}>{installed.columns[c.key] || ''}</td>)}
                           <td></td>
                           <td>{Math.round(installed.points)}</td>
