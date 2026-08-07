@@ -49,10 +49,12 @@ export default function ReminderBanner() {
       supabase.from('project_assignments').select('project_id, projects(project_name, project_number)')
         .eq('user_id', profile.id).eq('role', 'engineer').eq('is_active', true).range(from, to)
     )
-    const myProjects = (myAssigns || [])
+    const myProjectsRaw = (myAssigns || [])
       .filter((a) => a.projects)
       .map((a) => ({ id: a.project_id, project_name: a.projects.project_name, project_number: a.projects.project_number }))
-    const projectIds = [...new Set(myProjects.map((p) => p.id))]
+    // نفس ملحوظة الدالة التانية تحت: بنشيل أي تكرار لصف تخصيص نشط على نفس المشروع
+    const myProjects = [...new Map(myProjectsRaw.map((p) => [p.id, p])).values()]
+    const projectIds = myProjects.map((p) => p.id)
     if (projectIds.length === 0) { setEngineerOnboarding([]); return }
 
     const { data: doorsWithItems } = await fetchAllRows((from, to) =>
@@ -79,10 +81,13 @@ export default function ReminderBanner() {
       supabase.from('project_assignments').select('project_id, projects(project_name, project_number)')
         .eq('user_id', profile.id).eq('role', profile.role).eq('is_active', true).range(from, to)
     )
-    const myProjects = (myAssigns || [])
+    const myProjectsRaw = (myAssigns || [])
       .filter((a) => a.projects)
       .map((a) => ({ id: a.project_id, project_name: a.projects.project_name, project_number: a.projects.project_number }))
-    const projectIds = [...new Set(myProjects.map((p) => p.id))]
+    // لو حصل صف تخصيص نشط مكرر لنفس المشروع (مفيش قيد unique في القاعدة يمنع
+    // ده)، بنشيل التكرار هنا عشان العدد المعروض يمثّل مشاريع فريدة فعلًا
+    const myProjects = [...new Map(myProjectsRaw.map((p) => [p.id, p])).values()]
+    const projectIds = myProjects.map((p) => p.id)
     if (projectIds.length === 0) { setTeamOnboarding([]); return }
 
     const { data: anyInstalls } = await fetchAllRows((from, to) =>
