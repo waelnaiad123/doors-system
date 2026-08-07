@@ -231,10 +231,14 @@ export default function TechnicianDaily() {
       if (error) throw error
       // لو المسجّل مشرف، اعتماده بيروح للمهندس مباشرة (مش لمشرف زميله) - installation_required_approver_roles
       const nextApprover = profile.role === 'supervisor' ? 'المهندس' : 'المشرف'
-      setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد ${nextApprover}.`)
-      const refreshes = [loadToday(), loadWorkforceReminder()]
-      if (projectId) refreshes.push(loadPending(), loadEligibleDates())
-      await Promise.all(refreshes)
+      setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد ${nextApprover}. لاقيها في جدول "التركيبات المسجّلة اليوم" تحت.`)
+      // بنرجّع الفورم لحالتها الأولى بعد كل تسجيل ناجح - المشروع ده ممكن يكون
+      // اختفى من قائمة "مشاريع محتاجة إدخال"/"مشاريع جديدة" فور التسجيل، وسيبه
+      // مختار كان بيخلي القائمة تفضل ظاهرة فاضية من غير أي مشروع مختار فعليًا
+      setSelected(new Set())
+      setProjectId('')
+      setWorkDate('')
+      await Promise.all([loadToday(), loadWorkforceReminder(), loadUntouchedProjects()])
     } catch (e) {
       setError(`تسجيل التركيب: ${e.message}`)
     } finally {
