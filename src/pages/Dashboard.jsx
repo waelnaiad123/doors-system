@@ -259,7 +259,7 @@ export default function Dashboard() {
     const unentered = (unenteredAll || []).filter((p) => projectIds.includes(p.project_id))
     const myPending = (pendingInstallsAll || []).filter((r) => projectIds.includes(r.project_id) && r.technician_role !== 'supervisor')
     setStats([
-      { to: '/workforce', label: 'مشاريع محتاجة حصر أفراد اليوم', value: unentered.length, tone: unentered.length ? 'warn' : undefined },
+      { to: '/technician', label: 'مشاريع فيها عمال ولسه محتاجة تسجيل تركيب', value: unentered.length, tone: unentered.length ? 'warn' : undefined },
       { to: '/approval', label: 'تركيبات بانتظار اعتمادي', value: myPending.length, tone: myPending.length ? 'warn' : undefined },
     ])
 
@@ -271,11 +271,13 @@ export default function Dashboard() {
     const allRelevant = [...new Set([...unenteredIds, ...pendingIds])]
     const attentionItems = allRelevant.map((pid) => {
       const reasons = []
-      if (unenteredIds.has(pid)) reasons.push('حصر أفراد أو تسجيل تركيب اليوم')
+      // ملحوظة: v_unentered_workforce معناها "فيه عمال متسجلين ولسه محدش سجّل
+      // تركيب أو ملاحظة" - حصر الأفراد نفسه خلص، الناقص هو التركيب/الملاحظة بس
+      if (unenteredIds.has(pid)) reasons.push('تسجيل تركيب أو ملاحظة اليوم')
       if (pendingIds.has(pid)) reasons.push('اعتماد تركيبات بانتظارك')
       return {
         text: `"${nameByProject.get(pid) || ''}" محتاج: ${reasons.join('، ')}`,
-        to: pendingIds.has(pid) ? '/approval' : '/workforce',
+        to: pendingIds.has(pid) ? '/approval' : '/technician',
       }
     })
     setAttention(attentionItems.slice(0, 6))
