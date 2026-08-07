@@ -228,7 +228,9 @@ export default function TechnicianDaily() {
       }))
       const { error } = await supabase.from('installation_records').insert(rows)
       if (error) throw error
-      setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد المشرف.`)
+      // لو المسجّل مشرف، اعتماده بيروح للمهندس مباشرة (مش لمشرف زميله) - installation_required_approver_roles
+      const nextApprover = profile.role === 'supervisor' ? 'المهندس' : 'المشرف'
+      setNotice(`تم تسجيل ${rows.length} بند بنجاح بتاريخ ${workDate}، بانتظار اعتماد ${nextApprover}.`)
       await Promise.all([loadPending(), loadToday(), loadWorkforceReminder(), loadEligibleDates()])
     } catch (e) {
       setError(e.message)
