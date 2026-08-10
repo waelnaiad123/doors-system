@@ -80,6 +80,7 @@ export default function Dashboard() {
     const [
       { count: projectsCount }, { count: usersCount }, { data: pendingItems },
       { data: pendingInstalls }, { data: pendingDeliveries }, { data: pendingNotes },
+      { data: doorsWithPending },
     ] = await Promise.all([
       supabase.from('projects').select('id', { count: 'exact', head: true }),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true),
@@ -87,6 +88,9 @@ export default function Dashboard() {
       fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name, project_number, status').in('status', ['pending_review', 'supervisor_approved']).range(from, to)),
       fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name, project_number, status').eq('status', 'pending_review').range(from, to)),
       fetchAllRows((from, to) => supabase.from('daily_project_notes').select('project_id, projects(project_name, project_number)').eq('status', 'pending_review').range(from, to)),
+      // تفصيل كام بند/تركيب/تسليم/ملاحظة معلّقة في كل مشروع - ضُمّ هنا لإنه
+      // مش محتاج نتيجة أي استعلام تاني في الدفعة دي، فيتنفذ بالتوازي معاهم بدل ما يستناهم
+      fetchAllRows((from, to) => supabase.from('doors').select('project_id, projects(project_name, project_number), door_items(status)').range(from, to)),
     ])
     setStats([
       { to: '/projects', label: 'إجمالي المشاريع', value: projectsCount ?? '—' },
@@ -98,9 +102,6 @@ export default function Dashboard() {
     ])
 
     // تفصيل: كام بند/تركيب/تسليم/ملاحظة معلّقة في كل مشروع، ومين المهندس المسؤول عنه
-    const { data: doorsWithPending } = await fetchAllRows((from, to) =>
-      supabase.from('doors').select('project_id, projects(project_name, project_number), door_items(status)').range(from, to)
-    )
     const countByProject = new Map() // project_id -> { label, itemCount, installCount, deliveryCount, noteCount }
     function ensureProject(pid, label) {
       if (!countByProject.has(pid)) countByProject.set(pid, { label, itemCount: 0, installCount: 0, deliveryCount: 0, noteCount: 0 })
@@ -183,7 +184,10 @@ export default function Dashboard() {
     )
     const projectIds = [...new Set((myAssigns || []).map((a) => a.project_id))]
 
-    const [{ data: pendingInstalls }, { data: pendingNotes }, { data: pendingDeliveries }] = await Promise.all([
+    const [
+      { data: pendingInstalls }, { data: pendingNotes }, { data: pendingDeliveries },
+      { data: doorsWithItems }, { data: teamAssigns }, { data: anyInstalls },
+    ] = await Promise.all([
       projectIds.length
         ? fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name').in('project_id', projectIds).in('status', ['pending_review', 'supervisor_approved']).range(from, to))
         : Promise.resolve({ data: [] }),
@@ -192,6 +196,18 @@ export default function Dashboard() {
         : Promise.resolve({ data: [] }),
       projectIds.length
         ? fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name').eq('status', 'pending_review').in('project_id', projectIds).range(from, to))
+        : Promise.resolve({ data: [] }),
+      // التلاتة اللي جايين دول كانوا بيستنوا لحد ما اللي فوق يخلصوا، بس هما مش
+      // محتاجين نتيجتهم خالص - بس محتاجين projectIds اللي أصلًا جاهزة من فوق،
+      // فضمّيناهم في نفس الدفعة عشان يتنفذوا بالتوازي بدل التوالي
+      projectIds.length
+        ? fetchAllRows((from, to) => supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to))
+        : Promise.resolve({ data: [] }),
+      projectIds.length
+        ? supabase.from('project_assignments').select('project_id, role').in('project_id', projectIds).eq('is_active', true).in('role', ['supervisor', 'delivery_entry'])
+        : Promise.resolve({ data: [] }),
+      projectIds.length
+        ? fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to))
         : Promise.resolve({ data: [] }),
     ])
 
@@ -203,9 +219,6 @@ export default function Dashboard() {
     ])
 
     if (projectIds.length > 0) {
-      const { data: doorsWithItems } = await fetchAllRows((from, to) =>
-        supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
-      )
       const pendingProjectIds = new Set()
       const readyProjectIds = new Set() // فيه بند معتمد واحد على الأقل جاهز للتركيب
       ;(doorsWithItems || []).forEach((d) => {
@@ -214,18 +227,12 @@ export default function Dashboard() {
         if (statuses.includes('approved')) readyProjectIds.add(d.project_id)
       })
 
-      const { data: teamAssigns } = await supabase
-        .from('project_assignments').select('project_id, role')
-        .in('project_id', projectIds).eq('is_active', true).in('role', ['supervisor', 'delivery_entry'])
       const hasSupervisor = new Set((teamAssigns || []).filter((t) => t.role === 'supervisor').map((t) => t.project_id))
       const hasDelivery = new Set((teamAssigns || []).filter((t) => t.role === 'delivery_entry').map((t) => t.project_id))
 
       // مشروع فريقه جاهز وعنده بنود معتمدة، بس لسه مفيش أي تركيب اتسجّل عليه
       // خالص - ده مختلف عن "بنود بانتظار اعتماد" لإنه ممكن يفضل صامت للأبد
       // بمجرد ما خطوات البداية تخلص، من غير أي تنبيه يوضح إن الشغل واقف فعليًا
-      const { data: anyInstalls } = await fetchAllRows((from, to) =>
-        supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
-      )
       const startedProjectIds = new Set((anyInstalls || []).map((r) => r.project_id))
       const stalledProjectIds = new Set(
         projectIds.filter((pid) => hasSupervisor.has(pid) && readyProjectIds.has(pid) && !startedProjectIds.has(pid))
@@ -282,15 +289,14 @@ export default function Dashboard() {
   }
 
   async function loadSupervisor() {
-    const { data: myAssigns } = await fetchAllRows((from, to) =>
-      supabase.from('project_assignments').select('project_id').eq('user_id', profile.id).eq('role', 'supervisor').eq('is_active', true).range(from, to)
-    )
-    const projectIds = [...new Set((myAssigns || []).map((a) => a.project_id))]
-
-    const [{ data: unenteredAll }, { data: pendingInstallsAll }] = await Promise.all([
+    const [{ data: myAssigns }, { data: unenteredAll }, { data: pendingInstallsAll }] = await Promise.all([
+      fetchAllRows((from, to) =>
+        supabase.from('project_assignments').select('project_id').eq('user_id', profile.id).eq('role', 'supervisor').eq('is_active', true).range(from, to)
+      ),
       fetchAllRows((from, to) => supabase.from('v_unentered_workforce').select('*').range(from, to)),
       fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name, status, technician_role').in('status', ['pending_review']).range(from, to)),
     ])
+    const projectIds = [...new Set((myAssigns || []).map((a) => a.project_id))]
     const unentered = (unenteredAll || []).filter((p) => projectIds.includes(p.project_id))
     const myPending = (pendingInstallsAll || []).filter((r) => projectIds.includes(r.project_id) && r.technician_role !== 'supervisor')
     setStats([
@@ -351,10 +357,13 @@ export default function Dashboard() {
     const projectIds = (myProjects || []).map((p) => p.id)
     let pendingCount = 0
     const doorItemCountByProject = new Map()
+    let engAssigns = []
     if (projectIds.length > 0) {
-      const { data: doorsWithItems } = await fetchAllRows((from, to) =>
-        supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
-      )
+      const [{ data: doorsWithItems }, { data: engAssignsData }] = await Promise.all([
+        fetchAllRows((from, to) => supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)),
+        supabase.from('project_assignments').select('project_id').in('project_id', projectIds).eq('role', 'engineer').eq('is_active', true),
+      ])
+      engAssigns = engAssignsData
       ;(doorsWithItems || []).forEach((d) => {
         const items = d.door_items || []
         doorItemCountByProject.set(d.project_id, (doorItemCountByProject.get(d.project_id) || 0) + items.length)
@@ -367,9 +376,6 @@ export default function Dashboard() {
     ])
 
     if (projectIds.length > 0) {
-      const { data: engAssigns } = await supabase
-        .from('project_assignments').select('project_id')
-        .in('project_id', projectIds).eq('role', 'engineer').eq('is_active', true)
       const hasEngineer = new Set((engAssigns || []).map((a) => a.project_id))
 
       const items = []
