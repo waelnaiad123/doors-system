@@ -139,7 +139,7 @@ export default function ProjectStatusReport() {
             <span><span className="dot" style={{ background: 'var(--status-blue)' }}></span>تسليم للعميل</span>
             <span><span className="dot" style={{ background: 'var(--status-green)' }}></span>تسليم للاستشاري (نهائي)</span>
           </div>
-          <div className="card">
+          <div className="card print-compact">
             <h3 style={{ marginBottom: 8 }}>ملخص إجمالي لكل بند</h3>
             <div style={{ overflowX: 'auto' }}>
               <table>
@@ -170,7 +170,7 @@ export default function ProjectStatusReport() {
               </table>
             </div>
           </div>
-          <div className="card">
+          <div className="card print-compact">
             <table>
               <thead>
                 <tr>
