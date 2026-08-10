@@ -178,17 +178,17 @@ export default function ReminderBanner() {
     <div className="reminder-banner">
       {showEngineerOnboarding && (
         <Link to="/dashboard" className="reminder-line">
-          📋 اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات — {engineerOnboardingNames}
+          📋 {engineerOnboarding.length} مشروع جديد مخصص لك ({engineerOnboardingNames}): اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات
         </Link>
       )}
       {showStalled && (
         <Link to="/dashboard" className="reminder-line">
-          ⚠️ فريقه جاهز وبنوده معتمدة، ولسه مفيش أي تركيب مسجّل عليه خالص — {stalledNames}
+          ⚠️ {stalledProjects.length} مشروع فريقه جاهز وبنوده معتمدة ({stalledNames})، ولسه مفيش أي تركيب مسجّل عليه خالص
         </Link>
       )}
       {showTeamOnboarding && (
         <Link to={profile.role === 'supervisor' ? '/workforce' : '/technician'} className="reminder-line">
-          📋 {profile.role === 'supervisor' ? 'ابدأ بحصر الأفراد وتسجيل التركيب' : 'ابدأ تسجيل التركيب'} — {teamOnboardingNames}
+          📋 {teamOnboarding.length} مشروع جديد مخصص لك ({teamOnboardingNames}): {profile.role === 'supervisor' ? 'ابدأ بحصر الأفراد وتسجيل التركيب' : 'ابدأ تسجيل التركيب'}
         </Link>
       )}
       {showEntry && (
