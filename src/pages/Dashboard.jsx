@@ -154,9 +154,13 @@ export default function Dashboard() {
       if (info.installCount > 0) parts.push(`${info.installCount} تركيب بانتظار الاعتماد`)
       if (info.deliveryCount > 0) parts.push(`${info.deliveryCount} تسليم بانتظار الاعتماد`)
       if (info.noteCount > 0) parts.push(`${info.noteCount} ملاحظة بانتظار الاعتماد`)
+      // فيه اعتماد مستحق (تركيب/تسليم/ملاحظة) → شاشة اعتماد الإدخالات مباشرة على المشروع ده.
+      // غير كده لو بند BOM بس محتاج اعتماد → شاشة المشروع نفسها فين بيتم اعتماده.
+      const hasApprovalWork = info.installCount > 0 || info.deliveryCount > 0 || info.noteCount > 0
+      const to = hasApprovalWork ? `/approval?project=${pid}` : `/projects/${pid}`
       return {
         text: `${info.label} — ${parts.join('، ')} (المهندس: ${engineerText})`,
-        to: `/assignments?project=${pid}`,
+        to,
       }
     })
     if (sorted.length > 8) {
@@ -233,7 +237,13 @@ export default function Dashboard() {
         if (deliveryProjectIds.has(pid)) reasons.push('اعتماد التسليمات المعلّقة')
         if (!hasSupervisor.has(pid)) reasons.push('تخصيص مشرف')
         if (!hasDelivery.has(pid)) reasons.push('تخصيص مدخل بيانات تسليمات')
-        items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to: `/assignments?project=${pid}` })
+        const hasApprovalWork = installProjectIds.has(pid) || noteProjectIds.has(pid) || deliveryProjectIds.has(pid)
+        const to = hasApprovalWork
+          ? `/approval?project=${pid}`
+          : pendingProjectIds.has(pid)
+            ? `/projects/${pid}`
+            : `/assignments?project=${pid}`
+        items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to })
       })
       setAttention(items.slice(0, 6))
     }
