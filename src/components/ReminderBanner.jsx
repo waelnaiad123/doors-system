@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
@@ -14,7 +14,6 @@ function namesWithOverflow(items, max = 2) {
 
 export default function ReminderBanner() {
   const { profile } = useAuth()
-  const location = useLocation()
   const [unentered, setUnentered] = useState([])
   const [approvalsCount, setApprovalsCount] = useState(0)
   const [deliveriesCount, setDeliveriesCount] = useState(0)
@@ -24,7 +23,7 @@ export default function ReminderBanner() {
   const [teamOnboarding, setTeamOnboarding] = useState([])
   const [ready, setReady] = useState(false)
 
-  useEffect(() => { if (profile) load() }, [profile?.id, location.pathname]) // eslint-disable-line
+  useEffect(() => { if (profile) load() }, [profile?.id]) // eslint-disable-line
   useEffect(() => {
     if (!profile) return
     let interval = null
