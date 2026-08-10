@@ -317,7 +317,7 @@ export default function MonthlyProductivity() {
                     const workforce = workforceTotals[p.id] || { allTime: 0, thisMonth: 0 }
                     return (
                       <React.Fragment key={p.id}>
-                        <tr style={{ fontWeight: 700 }}>
+                        <tr className="print-bold-row" style={{ fontWeight: 700 }}>
                           <td className="print-proj-col">{p.project_number} — {p.project_name}</td>
                           <td title="إجمالي حصر الأفراد من بداية المشروع حتى يوم 20 من هذا الشهر">{workforce.allTime || ''}</td>
                           {REPORT_COLUMNS.map((c) => <td key={c.key}>{totals.columns[c.key] || ''}</td>)}
