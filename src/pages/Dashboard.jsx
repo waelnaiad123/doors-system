@@ -4,19 +4,19 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import { ROLES } from '../lib/roles'
+import { cairoTodayStr } from '../lib/cairoTime'
 
 const WEEKDAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
 
 function todayLabel() {
-  const d = new Date()
-  return `${WEEKDAYS[d.getDay()]}، ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  const [y, m, d] = cairoTodayStr().split('-').map(Number)
+  const jsDate = new Date(y, m - 1, d) // بس عشان نطلع اسم اليوم (getDay) من تاريخ القاهرة الصحيح
+  return `${WEEKDAYS[jsDate.getDay()]}، ${d} ${MONTHS[m - 1]} ${y}`
 }
 
 function todayLocalISO() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return cairoTodayStr()
 }
 
 function Corners() {
@@ -265,7 +265,12 @@ export default function Dashboard() {
               : `/assignments?project=${pid}`
         items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to })
       })
-      setAttention(items.slice(0, 6))
+      if (items.length > 6) {
+        const extra = items.length - 6
+        items.length = 6
+        items.push({ text: `+ ${extra} مشروع تاني فيه بنود أو موافقات معلّقة`, to: '/projects-overview' })
+      }
+      setAttention(items)
     }
 
     setActions([
@@ -310,7 +315,12 @@ export default function Dashboard() {
         to: pendingIds.has(pid) ? '/approval' : '/technician',
       }
     })
-    setAttention(attentionItems.slice(0, 6))
+    if (attentionItems.length > 6) {
+      const extra = attentionItems.length - 6
+      attentionItems.length = 6
+      attentionItems.push({ text: `+ ${extra} مشروع تاني محتاج تصرف منك`, to: '/workforce' })
+    }
+    setAttention(attentionItems)
     setActions([
       { to: '/workforce', label: 'حصر الأفراد' },
       { to: '/technician', label: 'تسجيل تركيب' },
@@ -373,7 +383,12 @@ export default function Dashboard() {
           to: reasons.length === 1 && reasons[0] === 'لسه محتاج تخصيص مهندس' ? `/assignments?project=${p.id}` : `/projects/${p.id}`,
         })
       })
-      setAttention(items.slice(0, 8))
+      if (items.length > 8) {
+        const extra = items.length - 8
+        items.length = 8
+        items.push({ text: `+ ${extra} مشروع تاني محتاج تكمّل بياناته`, to: '/projects' })
+      }
+      setAttention(items)
     }
 
     setActions([
