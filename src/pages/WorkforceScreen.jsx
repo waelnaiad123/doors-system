@@ -8,6 +8,7 @@ export default function WorkforceScreen() {
   const { profile } = useAuth()
   const [date, setDate] = useState(cairoTodayStr())
   const [projects, setProjects] = useState([])
+  const [untouchedIds, setUntouchedIds] = useState(new Set())
   const [entries, setEntries] = useState({})
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState('')
@@ -24,8 +25,27 @@ export default function WorkforceScreen() {
     const { data, error } = await fetchAllRows((from, to) =>
       supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
     )
-    if (error) setError(error.message)
-    setProjects(data || [])
+    if (error) { setError(error.message); setLoading(false); return }
+    const list = data || []
+
+    // مشاريع لسه معملهاش أي تركيب خالص - نفس فكرة "مشاريع جديدة" في شاشة تسجيل
+    // تركيب، عشان المشرف يقدر يميّز مشروع اتخصص له حديثًا وسط باقي مشاريعه
+    const ids = list.map((p) => p.id)
+    let untouched = new Set()
+    if (ids.length > 0) {
+      const { data: installs } = await fetchAllRows((from, to) =>
+        supabase.from('v_installations_detail').select('project_id').in('project_id', ids).range(from, to)
+      )
+      const touched = new Set((installs || []).map((r) => r.project_id))
+      untouched = new Set(ids.filter((id) => !touched.has(id)))
+    }
+    setUntouchedIds(untouched)
+    // المشاريع الجديدة (لسه معملهاش تركيب) تفضل فوق، والباقي أبجدي زي ما كان
+    setProjects([...list].sort((a, b) => {
+      const aNew = untouched.has(a.id) ? 0 : 1
+      const bNew = untouched.has(b.id) ? 0 : 1
+      return aNew - bNew || a.project_name.localeCompare(b.project_name)
+    }))
     setLoading(false)
   }
 
@@ -88,6 +108,7 @@ export default function WorkforceScreen() {
                 entry={entries[p.id]}
                 busy={savingId === p.id}
                 locked={isLocked}
+                isNew={untouchedIds.has(p.id)}
                 onSave={(hc, pp, notes) => handleSave(p.id, hc, pp, notes)}
               />
             ))}
@@ -98,7 +119,7 @@ export default function WorkforceScreen() {
   )
 }
 
-function WorkforceRow({ project, entry, busy, locked, onSave }) {
+function WorkforceRow({ project, entry, busy, locked, isNew, onSave }) {
   const [headcount, setHeadcount] = useState(entry?.headcount ?? '')
   const [plannedPoints, setPlannedPoints] = useState(entry?.planned_points ?? '')
   const [notes, setNotes] = useState(entry?.notes ?? '')
@@ -115,6 +136,7 @@ function WorkforceRow({ project, entry, busy, locked, onSave }) {
         <div>
           <strong>{project.project_name}</strong>
           <span style={{ fontSize: 12.5, color: 'var(--muted)' }}> ({project.project_number})</span>
+          {isNew && <span className="badge badge-pending" style={{ marginInlineStart: 8 }}>🆕 جديد — لسه معملتش فيه تركيب</span>}
         </div>
         {entry && <span className="badge badge-ok">تم التسجيل</span>}
       </div>
