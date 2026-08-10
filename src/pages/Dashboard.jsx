@@ -207,13 +207,29 @@ export default function Dashboard() {
         supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
       )
       const pendingProjectIds = new Set()
-      ;(doorsWithItems || []).forEach((d) => { if ((d.door_items || []).some((it) => it.status === 'pending_review')) pendingProjectIds.add(d.project_id) })
+      const readyProjectIds = new Set() // فيه بند معتمد واحد على الأقل جاهز للتركيب
+      ;(doorsWithItems || []).forEach((d) => {
+        const statuses = (d.door_items || []).map((it) => it.status)
+        if (statuses.includes('pending_review')) pendingProjectIds.add(d.project_id)
+        if (statuses.includes('approved')) readyProjectIds.add(d.project_id)
+      })
 
       const { data: teamAssigns } = await supabase
         .from('project_assignments').select('project_id, role')
         .in('project_id', projectIds).eq('is_active', true).in('role', ['supervisor', 'delivery_entry'])
       const hasSupervisor = new Set((teamAssigns || []).filter((t) => t.role === 'supervisor').map((t) => t.project_id))
       const hasDelivery = new Set((teamAssigns || []).filter((t) => t.role === 'delivery_entry').map((t) => t.project_id))
+
+      // مشروع فريقه جاهز وعنده بنود معتمدة، بس لسه مفيش أي تركيب اتسجّل عليه
+      // خالص - ده مختلف عن "بنود بانتظار اعتماد" لإنه ممكن يفضل صامت للأبد
+      // بمجرد ما خطوات البداية تخلص، من غير أي تنبيه يوضح إن الشغل واقف فعليًا
+      const { data: anyInstalls } = await fetchAllRows((from, to) =>
+        supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
+      )
+      const startedProjectIds = new Set((anyInstalls || []).map((r) => r.project_id))
+      const stalledProjectIds = new Set(
+        projectIds.filter((pid) => hasSupervisor.has(pid) && readyProjectIds.has(pid) && !startedProjectIds.has(pid))
+      )
 
       const installProjectIds = new Set((pendingInstalls || []).map((r) => r.project_id))
       const noteProjectIds = new Set((pendingNotes || []).map((n) => n.project_id))
@@ -227,6 +243,7 @@ export default function Dashboard() {
         ...installProjectIds,
         ...noteProjectIds,
         ...deliveryProjectIds,
+        ...stalledProjectIds,
         ...projectIds.filter((pid) => !hasSupervisor.has(pid) || !hasDelivery.has(pid)),
       ])
       allRelevant.forEach((pid) => {
@@ -235,6 +252,7 @@ export default function Dashboard() {
         if (installProjectIds.has(pid)) reasons.push('اعتماد التركيبات المعلّقة')
         if (noteProjectIds.has(pid)) reasons.push('اعتماد الملاحظات المعلّقة')
         if (deliveryProjectIds.has(pid)) reasons.push('اعتماد التسليمات المعلّقة')
+        if (stalledProjectIds.has(pid)) reasons.push('لسه مفيش أي تركيب مسجّل رغم إن الفريق والبنود جاهزين')
         if (!hasSupervisor.has(pid)) reasons.push('تخصيص مشرف')
         if (!hasDelivery.has(pid)) reasons.push('تخصيص مدخل بيانات تسليمات')
         const hasApprovalWork = installProjectIds.has(pid) || noteProjectIds.has(pid) || deliveryProjectIds.has(pid)
@@ -242,7 +260,9 @@ export default function Dashboard() {
           ? `/approval?project=${pid}`
           : pendingProjectIds.has(pid)
             ? `/projects/${pid}`
-            : `/assignments?project=${pid}`
+            : stalledProjectIds.has(pid)
+              ? `/projects/${pid}`
+              : `/assignments?project=${pid}`
         items.push({ text: `"${seenNames.get(pid) || ''}" محتاج: ${reasons.join('، ')}`, to })
       })
       setAttention(items.slice(0, 6))
@@ -316,22 +336,46 @@ export default function Dashboard() {
 
   async function loadDataEntry() {
     const { data: myProjects } = await fetchAllRows((from, to) =>
-      supabase.from('projects').select('id').range(from, to)
+      supabase.from('projects').select('id, project_name, project_number').range(from, to)
     )
     const projectIds = (myProjects || []).map((p) => p.id)
     let pendingCount = 0
+    const doorItemCountByProject = new Map()
     if (projectIds.length > 0) {
       const { data: doorsWithItems } = await fetchAllRows((from, to) =>
-        supabase.from('doors').select('door_items(status)').in('project_id', projectIds).range(from, to)
+        supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
       )
       ;(doorsWithItems || []).forEach((d) => {
-        (d.door_items || []).forEach((it) => { if (it.status === 'pending_review') pendingCount++ })
+        const items = d.door_items || []
+        doorItemCountByProject.set(d.project_id, (doorItemCountByProject.get(d.project_id) || 0) + items.length)
+        items.forEach((it) => { if (it.status === 'pending_review') pendingCount++ })
       })
     }
     setStats([
       { to: '/projects', label: 'المشاريع', value: projectIds.length },
       { to: '/projects', label: 'بنود بانتظار اعتماد المهندس', value: pendingCount },
     ])
+
+    if (projectIds.length > 0) {
+      const { data: engAssigns } = await supabase
+        .from('project_assignments').select('project_id')
+        .in('project_id', projectIds).eq('role', 'engineer').eq('is_active', true)
+      const hasEngineer = new Set((engAssigns || []).map((a) => a.project_id))
+
+      const items = []
+      ;(myProjects || []).forEach((p) => {
+        const reasons = []
+        if (!doorItemCountByProject.get(p.id)) reasons.push('لسه معملتش فيه أي باب أو بند خالص')
+        if (!hasEngineer.has(p.id)) reasons.push('لسه محتاج تخصيص مهندس')
+        if (reasons.length === 0) return
+        items.push({
+          text: `"${p.project_number} — ${p.project_name}" ${reasons.join('، ')}`,
+          to: reasons.length === 1 && reasons[0] === 'لسه محتاج تخصيص مهندس' ? `/assignments?project=${p.id}` : `/projects/${p.id}`,
+        })
+      })
+      setAttention(items.slice(0, 8))
+    }
+
     setActions([
       { to: '/projects', label: 'المشاريع' },
       { to: '/assignments', label: 'تخصيص المهندس' },
