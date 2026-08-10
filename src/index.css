@@ -185,6 +185,9 @@ tr:hover td { background: var(--bg); }
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /* مقصورة على تقرير إنتاجية الشهر بس - صف الإجمالي مطلوب يظهر عريض في
+     الطباعة، بعكس باقي خلايا .print-compact اللي مفروضة تفضل بخط عادي */
+  .print-compact .print-bold-row td { font-weight: 700 !important; }
   .print-compact tr, .print-compact tr td, .print-compact tr th { height: auto !important; }
   .print-compact tr { page-break-inside: avoid; }
   .print-only { display: inline !important; }
