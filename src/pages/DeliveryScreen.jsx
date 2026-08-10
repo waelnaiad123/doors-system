@@ -2,19 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
-
-function todayStr() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+import { cairoTodayStr } from '../lib/cairoTime'
 
 export default function DeliveryScreen() {
   const { profile } = useAuth()
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
   const [deliveryType, setDeliveryType] = useState('client')
-  const [clientDate, setClientDate] = useState(todayStr())
+  const [clientDate, setClientDate] = useState(cairoTodayStr())
   const [wirCode, setWirCode] = useState('')
   const [search, setSearch] = useState('')
   const [items, setItems] = useState([])
@@ -32,7 +27,7 @@ export default function DeliveryScreen() {
   async function loadProjects() {
     setLoadingProjects(true)
     const { data, error } = await supabase.from('projects').select('id, project_name, project_number').order('project_name')
-    if (error) setError(error.message)
+    if (error) setError(`تحميل قائمة المشاريع: ${error.message}`)
     setProjects(data || [])
     setLoadingProjects(false)
   }
@@ -45,7 +40,7 @@ export default function DeliveryScreen() {
       if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
       return q.range(from, to)
     })
-    if (error) setError(error.message)
+    if (error) setError(`تحميل البنود القابلة للتسليم: ${error.message}`)
     const filtered = (data || []).filter((it) => (deliveryType === 'client' ? !it.delivered_to_client : !it.delivered_to_consultant))
     setItems(filtered)
     setSelected(new Set())
@@ -104,7 +99,7 @@ export default function DeliveryScreen() {
       setNotice(`تم تسجيل تسليم ${rows.length} بند بنجاح، بانتظار اعتماد المهندس.`)
       await Promise.all([loadItems(), loadRecent()])
     } catch (e) {
-      setError(e.message)
+      setError(`تسجيل التسليم: ${e.message}`)
     } finally {
       setSubmitting(false)
     }
@@ -113,8 +108,13 @@ export default function DeliveryScreen() {
   async function handleUndo(deliveryId) {
     setError('')
     const { error } = await supabase.from('deliveries').delete().eq('id', deliveryId)
-    if (error) { setError(error.message); return }
-    await Promise.all([loadItems(), loadRecent()])
+    if (error) { setError(`التراجع عن التسليم نفسه فشل: ${error.message}`); return }
+    // loadItems بيفلتر بـ projectId المختار - لو "تراجع" اتدوس من جدول "آخر
+    // تسليماتي" (اللي مش مرتبط بمشروع مختار)، من غير الشرط ده هيتبعت قيمة
+    // فاضية لعمود uuid ويرمي خطأ، بالظبط زي باگ "تراجع" اللي اتصلح قبل كده
+    const refreshes = [loadRecent()]
+    if (projectId) refreshes.push(loadItems())
+    await Promise.all(refreshes)
   }
 
   return (
