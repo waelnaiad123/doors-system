@@ -3,18 +3,19 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { REPORT_COLUMNS, emptyColumnTotals } from '../lib/reportColumns'
 import { useAuth } from '../AuthContext'
+import { cairoTodayStr } from '../lib/cairoTime'
 
 function pad(n) { return String(n).padStart(2, '0') }
 function toISO(y, m, d) { return `${y}-${pad(m)}-${pad(d)}` }
 
 export default function MonthlyProductivity() {
   const { profile } = useAuth()
-  const today = new Date()
+  const [todayY, todayM, todayD] = cairoTodayStr().split('-').map(Number)
   const canManageOthers = profile.role === 'admin' || profile.is_installations_manager
   const [engineersList, setEngineersList] = useState([])
   const [selectedEngineerId, setSelectedEngineerId] = useState(profile.role === 'engineer' ? profile.id : '')
-  const [year, setYear] = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [year, setYear] = useState(todayY)
+  const [month, setMonth] = useState(todayM)
 
   const [projects, setProjects] = useState([]) // {id, project_name, project_number, supervisor_name}
   const [itemTotals, setItemTotals] = useState({}) // project_id -> {columns, points}
@@ -28,9 +29,9 @@ export default function MonthlyProductivity() {
   const [notice, setNotice] = useState('')
   const [busyProjectId, setBusyProjectId] = useState('')
 
-  const isCurrentOrPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month <= today.getMonth() + 1)
-  const isThisExactMonth = year === today.getFullYear() && month === today.getMonth() + 1
-  const canEdit = isCurrentOrPastMonth && (!isThisExactMonth || today.getDate() >= 21)
+  const isCurrentOrPastMonth = year < todayY || (year === todayY && month <= todayM)
+  const isThisExactMonth = year === todayY && month === todayM
+  const canEdit = isCurrentOrPastMonth && (!isThisExactMonth || todayD >= 21)
 
   useEffect(() => {
     if (canManageOthers) loadEngineersList()
@@ -269,7 +270,7 @@ export default function MonthlyProductivity() {
           </div>
           {!canEdit && isThisExactMonth && (
             <div className="alert" style={{ marginTop: 10, background: 'var(--pending-soft)', color: 'var(--pending)' }}>
-              تقرير هذا الشهر بيتفتح للتسجيل يوم 21 فقط. النهاردة يوم {today.getDate()}.
+              تقرير هذا الشهر بيتفتح للتسجيل يوم 21 فقط. النهاردة يوم {todayD}.
             </div>
           )}
         </div>
