@@ -4,6 +4,14 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 
+// بيكوّن نص زي "مشروع أ، مشروع ب، +٣ تاني" بدل ما نكتفي بعدد بس - عشان
+// المستخدم يعرف بالظبط أي مشروع المقصود من غير ما يحتاج يدوّر عليه بنفسه
+function namesWithOverflow(items, max = 2) {
+  const names = items.map((p) => p.project_name)
+  if (names.length <= max) return names.join('، ')
+  return `${names.slice(0, max).join('، ')}، +${names.length - max} تاني`
+}
+
 export default function ReminderBanner() {
   const { profile } = useAuth()
   const location = useLocation()
@@ -12,6 +20,7 @@ export default function ReminderBanner() {
   const [deliveriesCount, setDeliveriesCount] = useState(0)
   const [notesCount, setNotesCount] = useState(0)
   const [engineerOnboarding, setEngineerOnboarding] = useState([])
+  const [stalledProjects, setStalledProjects] = useState([])
   const [teamOnboarding, setTeamOnboarding] = useState([])
   const [ready, setReady] = useState(false)
 
@@ -55,14 +64,17 @@ export default function ReminderBanner() {
     // نفس ملحوظة الدالة التانية تحت: بنشيل أي تكرار لصف تخصيص نشط على نفس المشروع
     const myProjects = [...new Map(myProjectsRaw.map((p) => [p.id, p])).values()]
     const projectIds = myProjects.map((p) => p.id)
-    if (projectIds.length === 0) { setEngineerOnboarding([]); return }
+    if (projectIds.length === 0) { setEngineerOnboarding([]); setStalledProjects([]); return }
 
     const { data: doorsWithItems } = await fetchAllRows((from, to) =>
       supabase.from('doors').select('project_id, door_items(status)').in('project_id', projectIds).range(from, to)
     )
     const pendingProjectIds = new Set()
+    const readyProjectIds = new Set()
     ;(doorsWithItems || []).forEach((d) => {
-      if ((d.door_items || []).some((it) => it.status === 'pending_review')) pendingProjectIds.add(d.project_id)
+      const statuses = (d.door_items || []).map((it) => it.status)
+      if (statuses.includes('pending_review')) pendingProjectIds.add(d.project_id)
+      if (statuses.includes('approved')) readyProjectIds.add(d.project_id)
     })
 
     const { data: teamAssigns } = await supabase
@@ -73,6 +85,17 @@ export default function ReminderBanner() {
 
     setEngineerOnboarding(
       myProjects.filter((p) => pendingProjectIds.has(p.id) || !hasSupervisor.has(p.id) || !hasDelivery.has(p.id))
+    )
+
+    // مشاريع فريقها جاهز وعندها بنود معتمدة، بس لسه مفيش أي تركيب اتسجّل عليها
+    // خالص - منفصلة عن قائمة "مشروع جديد" فوق لإنها ممكن تفضل صامتة للأبد بعد
+    // ما خطوات البداية تخلص، من غير أي تنبيه يوضح إن الشغل واقف فعليًا
+    const { data: anyInstalls } = await fetchAllRows((from, to) =>
+      supabase.from('v_installations_detail').select('project_id').in('project_id', projectIds).range(from, to)
+    )
+    const startedProjectIds = new Set((anyInstalls || []).map((r) => r.project_id))
+    setStalledProjects(
+      myProjects.filter((p) => hasSupervisor.has(p.id) && readyProjectIds.has(p.id) && !startedProjectIds.has(p.id))
     )
   }
 
@@ -144,19 +167,28 @@ export default function ReminderBanner() {
   const showDeliveries = deliveriesCount > 0
   const showNotes = notesCount > 0
   const showEngineerOnboarding = engineerOnboarding.length > 0
+  const showStalled = stalledProjects.length > 0
   const showTeamOnboarding = teamOnboarding.length > 0
-  if (!showEntry && !showApprovals && !showDeliveries && !showNotes && !showEngineerOnboarding && !showTeamOnboarding) return null
+  if (!showEntry && !showApprovals && !showDeliveries && !showNotes && !showEngineerOnboarding && !showStalled && !showTeamOnboarding) return null
+  const engineerOnboardingNames = showEngineerOnboarding ? namesWithOverflow(engineerOnboarding) : ''
+  const stalledNames = showStalled ? namesWithOverflow(stalledProjects) : ''
+  const teamOnboardingNames = showTeamOnboarding ? namesWithOverflow(teamOnboarding) : ''
 
   return (
     <div className="reminder-banner">
       {showEngineerOnboarding && (
         <Link to="/dashboard" className="reminder-line">
-          📋 {engineerOnboarding.length} مشروع جديد مخصص لك: اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات
+          📋 اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات — {engineerOnboardingNames}
+        </Link>
+      )}
+      {showStalled && (
+        <Link to="/dashboard" className="reminder-line">
+          ⚠️ فريقه جاهز وبنوده معتمدة، ولسه مفيش أي تركيب مسجّل عليه خالص — {stalledNames}
         </Link>
       )}
       {showTeamOnboarding && (
         <Link to={profile.role === 'supervisor' ? '/workforce' : '/technician'} className="reminder-line">
-          📋 {teamOnboarding.length} مشروع جديد مخصص لك: {profile.role === 'supervisor' ? 'ابدأ بحصر الأفراد وتسجيل التركيب' : 'ابدأ تسجيل التركيب'}
+          📋 {profile.role === 'supervisor' ? 'ابدأ بحصر الأفراد وتسجيل التركيب' : 'ابدأ تسجيل التركيب'} — {teamOnboardingNames}
         </Link>
       )}
       {showEntry && (
