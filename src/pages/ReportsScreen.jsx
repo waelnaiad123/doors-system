@@ -50,7 +50,7 @@ export default function ReportsScreen() {
       fetchAllRows((from, to) =>
         supabase.from('projects').select('id, project_name, project_number, location_code').order('project_name').range(from, to)
       ),
-      supabase.from('profiles').select('id, full_name, role').in('role', ['technician', 'supervisor', 'engineer']).order('full_name'),
+      supabase.from('profiles').select('id, full_name, role, is_active').in('role', ['technician', 'supervisor', 'engineer']).order('full_name'),
     ])
     if (projRes.error) setError(projRes.error.message)
     setProjects(projRes.data || [])
@@ -184,6 +184,11 @@ export default function ReportsScreen() {
           <label>المشاريع ({selectedProjectIds.size > 0 ? `${selectedProjectIds.size} محدد` : 'كل المشاريع المتاحة لك'})</label>
           <input placeholder="ابحث بالاسم، الرقم، أو كود المكان..." value={projectSearch}
             onChange={(e) => setProjectSearch(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
+          {filteredProjects.length > 150 && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+              ظاهر أول 150 مشروع بس من {filteredProjects.length} مطابق. ضيّق البحث عشان تشوف الباقي.
+            </p>
+          )}
           <div style={{ maxHeight: 180, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
             {filteredProjects.slice(0, 150).map((p) => (
               <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 2px' }}>
@@ -197,10 +202,12 @@ export default function ReportsScreen() {
         <div className="field">
           <label>الأفراد ({selectedPersonIds.size > 0 ? `${selectedPersonIds.size} محدد` : 'الكل'}) — فني / مشرف / مهندس</label>
           <div style={{ maxHeight: 160, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-            {people.map((p) => (
+            {[...people].sort((a, b) => (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name)).map((p) => (
               <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 2px' }}>
                 <input type="checkbox" checked={selectedPersonIds.has(p.id)} onChange={() => togglePerson(p.id)} style={{ width: 18, height: 18 }} />
-                <span style={{ fontSize: 13.5 }}>{p.full_name}</span>
+                <span style={{ fontSize: 13.5, color: p.is_active ? 'inherit' : 'var(--muted)' }}>
+                  {p.full_name}{!p.is_active && ' (معطّل)'}
+                </span>
               </label>
             ))}
           </div>
