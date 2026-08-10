@@ -150,7 +150,7 @@ export default function ReminderBanner() {
   return (
     <div className="reminder-banner">
       {showEngineerOnboarding && (
-        <Link to={`/assignments?project=${engineerOnboarding[0].id}`} className="reminder-line">
+        <Link to="/dashboard" className="reminder-line">
           📋 {engineerOnboarding.length} مشروع جديد مخصص لك: اعتمد البنود المعلّقة وخصص مشرف ومدخل بيانات تسليمات
         </Link>
       )}
