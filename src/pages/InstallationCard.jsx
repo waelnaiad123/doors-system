@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { REPORT_COLUMNS, emptyColumnTotals } from '../lib/reportColumns'
 import { useAuth } from '../AuthContext'
+import { cairoTodayStr } from '../lib/cairoTime'
 
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -245,12 +246,12 @@ function InstallationCardView({ project, period, month, year, start, data, names
 
 export default function InstallationCard() {
   const { profile } = useAuth()
-  const today = new Date()
+  const [todayY, todayM] = cairoTodayStr().split('-').map(Number)
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
   const [project, setProject] = useState(null)
-  const [year, setYear] = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [year, setYear] = useState(todayY)
+  const [month, setMonth] = useState(todayM)
   const [period, setPeriod] = useState(2)
 
   const [totalItems, setTotalItems] = useState([]) // كل بنود المشروع (بغض النظر عن حالة التركيب)
