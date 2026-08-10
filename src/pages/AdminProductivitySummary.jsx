@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
+import { cairoTodayStr } from '../lib/cairoTime'
 
 export default function AdminProductivitySummary() {
   const { profile } = useAuth()
-  const today = new Date()
-  const [year, setYear] = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [todayY, todayM] = cairoTodayStr().split('-').map(Number)
+  const [year, setYear] = useState(todayY)
+  const [month, setMonth] = useState(todayM)
   const [rows, setRows] = useState([])
   const [addWorks, setAddWorks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,7 +52,7 @@ export default function AdminProductivitySummary() {
     const m = new Map()
     rows.forEach((r) => {
       const name = r.profiles?.full_name || '—'
-      if (!m.has(r.engineer_id)) m.set(r.engineer_id, { name, monthPoints: 0, projectCount: 0, additionalPoints: 0 })
+      if (!m.has(r.engineer_id)) m.set(r.engineer_id, { id: r.engineer_id, name, monthPoints: 0, projectCount: 0, additionalPoints: 0 })
       const e = m.get(r.engineer_id)
       e.monthPoints += Number(r.month_points) || 0
       e.projectCount += 1
@@ -60,7 +61,7 @@ export default function AdminProductivitySummary() {
       const total = (Number(r.factory_storage) || 0) + (Number(r.install_storage) || 0)
         + (Number(r.factory_repairs) || 0) + (Number(r.other_points) || 0)
       const name = r.profiles?.full_name || '—'
-      if (!m.has(r.engineer_id)) m.set(r.engineer_id, { name, monthPoints: 0, projectCount: 0, additionalPoints: 0 })
+      if (!m.has(r.engineer_id)) m.set(r.engineer_id, { id: r.engineer_id, name, monthPoints: 0, projectCount: 0, additionalPoints: 0 })
       m.get(r.engineer_id).additionalPoints += total
     })
     return Array.from(m.values()).sort((a, b) => b.monthPoints - a.monthPoints)
@@ -109,7 +110,7 @@ export default function AdminProductivitySummary() {
             </thead>
             <tbody>
               {perEngineer.map((e) => (
-                <tr key={e.name}>
+                <tr key={e.id}>
                   <td>{e.name}</td>
                   <td>{e.projectCount}</td>
                   <td>{Math.round(e.monthPoints)}</td>
