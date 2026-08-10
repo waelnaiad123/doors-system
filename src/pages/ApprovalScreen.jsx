@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder } from '../lib/itemOrder'
@@ -36,8 +37,9 @@ const STATUS_BADGE = {
 
 export default function ApprovalScreen() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const [projectsPending, setProjectsPending] = useState([])
-  const [projectId, setProjectId] = useState('')
+  const [projectId, setProjectId] = useState(searchParams.get('project') || '')
   const [records, setRecords] = useState([])
   const [notes, setNotes] = useState([])
   const [deliveries, setDeliveries] = useState([])
