@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 
 const TABLES = [
-  'profiles', 'projects', 'doors', 'door_items', 'item_types',
+  'profiles', 'profiles_private', 'projects', 'doors', 'door_items', 'item_types',
   'project_assignments', 'project_assignment_doors',
   'installation_records', 'deliveries',
   'daily_workforce', 'daily_project_notes',
@@ -11,8 +11,9 @@ const TABLES = [
 ]
 
 // ترتيب الاستعادة لازم يحترم الروابط بين الجداول (الأب قبل الابن).
-// "profiles" مستبعد عمدًا: صفوفه مرتبطة بحسابات دخول حقيقية (auth) مش ممكن نعيد إنشاءها من ملف.
-// لو حساب اتمسح، أي بيانات بترجّع له (created_by, technician_id...) هترفض تلقائيًا وهيظهر في تقرير الفشل.
+// "profiles" و"profiles_private" مستبعدين عمدًا: صفوفهم مرتبطة بحسابات دخول
+// حقيقية (auth) مش ممكن نعيد إنشاءها من ملف. لو حساب اتمسح، أي بيانات بترجّع
+// له (created_by, technician_id...) هترفض تلقائيًا وهيظهر في تقرير الفشل.
 const RESTORE_ORDER = [
   'item_types', 'projects', 'doors', 'door_items',
   'project_assignments', 'project_assignment_doors',
@@ -174,7 +175,8 @@ export default function BackupExport() {
               </tbody>
             </table>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-              أي صفوف فشلت غالبًا بسبب حساب مستخدم مرتبط بيها اتمسح من النظام. الباقي رجع بنجاح.
+              أي صفوف فشلت غالبًا بسبب حساب مستخدم مرتبط بيها اتمسح من النظام، أو لإن الملف مأخوذ قبل تحديث لشكل
+              أحد الجداول (زي إضافة خانات إجبارية جديدة) ومحتاج نسخة أحدث بنفس الشكل الحالي. الباقي رجع بنجاح.
             </p>
           </div>
         )}
