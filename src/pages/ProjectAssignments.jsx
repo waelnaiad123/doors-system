@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import { ROLES, ROLE_LIST } from '../lib/roles'
+import ProjectSearchBox from '../components/ProjectSearchBox'
+import DoorFilter from '../components/DoorFilter'
 
 export default function ProjectAssignments() {
   const { profile } = useAuth()
@@ -26,16 +28,18 @@ export default function ProjectAssignments() {
   const [newUserId, setNewUserId] = useState('')
   const [newRole, setNewRole] = useState(profile.role === 'data_entry' ? 'engineer' : 'technician')
   const [scopeMode, setScopeMode] = useState('whole')
-  const [doorSearch, setDoorSearch] = useState('')
+  const [filteredDoors, setFilteredDoors] = useState([])
   const [selectedDoors, setSelectedDoors] = useState(new Set())
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadProjects(); loadProfiles() }, [])
   useEffect(() => { if (projectId) { loadAssignments(); loadDoors() } }, [projectId]) // eslint-disable-line
+  useEffect(() => { if (selectedDoors.size === 0) setShowSelectedOnly(false) }, [selectedDoors])
 
   async function loadProjects() {
     const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+      supabase.from('projects').select('id, project_name, project_number, client_name').order('project_name').range(from, to)
     )
     if (error) setError(error.message)
     setProjects(data || [])
@@ -49,7 +53,7 @@ export default function ProjectAssignments() {
 
   async function loadDoors() {
     const { data } = await fetchAllRows((from, to) =>
-      supabase.from('doors').select('id, door_code').eq('project_id', projectId).order('door_code').range(from, to)
+      supabase.from('doors').select('id, door_code, order_number, serial, building, floor, door_number, door_type').eq('project_id', projectId).order('door_code').range(from, to)
     )
     setDoors(data || [])
   }
@@ -72,12 +76,13 @@ export default function ProjectAssignments() {
     setAssignments((aData || []).map((a) => ({ ...a, doorIds: scopeMap.get(a.id) || [] })))
   }
 
-  const matchedDoors = useMemo(() => (
-    doorSearch.trim()
-      ? doors.filter((d) => d.door_code.toLowerCase().includes(doorSearch.toLowerCase()))
-      : doors
-  ), [doors, doorSearch])
-  const filteredDoors = useMemo(() => matchedDoors.slice(0, 100), [matchedDoors])
+  // "اعرض المحدد بس" - بيشتغل فوق فلتر الأبواب، عشان تقدر تجمّع مجموعة أبواب
+  // من فلاتر مختلفة وتشوفهم مع بعض في مكان واحد قبل ما تأكد التخصيص
+  const selectionFilteredDoors = useMemo(() => {
+    if (!showSelectedOnly) return filteredDoors
+    return filteredDoors.filter((d) => selectedDoors.has(d.id))
+  }, [filteredDoors, showSelectedOnly, selectedDoors])
+  const visibleDoors = useMemo(() => selectionFilteredDoors.slice(0, 100), [selectionFilteredDoors])
 
   function toggleDoorSel(id) {
     setSelectedDoors((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -120,7 +125,7 @@ export default function ProjectAssignments() {
         if (dErr) throw dErr
       }
       setNotice('تم التخصيص بنجاح.')
-      setNewUserId(''); setSelectedDoors(new Set()); setScopeMode('whole'); setDoorSearch('')
+      setNewUserId(''); setSelectedDoors(new Set()); setScopeMode('whole')
       await loadAssignments()
     } catch (err) {
       setError(err.message)
@@ -146,15 +151,7 @@ export default function ProjectAssignments() {
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <div className="card">
-        <div className="field">
-          <label>اختر المشروع</label>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
-            <option value="">-- اختر مشروعًا --</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-            ))}
-          </select>
-        </div>
+        <ProjectSearchBox projects={projects} value={projectId} onChange={setProjectId} />
       </div>
 
       {projectId && (
@@ -204,23 +201,33 @@ export default function ProjectAssignments() {
 
             {scopeMode === 'doors' && (
               <div className="field">
-                <input placeholder="ابحث عن كود باب..." value={doorSearch}
-                  onChange={(e) => setDoorSearch(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
+                <DoorFilter doors={doors} onFilteredChange={setFilteredDoors} />
                 <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                  {filteredDoors.length === 0 && <p style={{ fontSize: 13, color: 'var(--muted)' }}>لا توجد أبواب مطابقة.</p>}
-                  {matchedDoors.length > 100 && (
-                    <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
-                      ظاهر أول 100 باب بس من {matchedDoors.length} مطابق. ضيّق البحث عشان تشوف الباقي.
+                  {visibleDoors.length === 0 && (
+                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+                      {showSelectedOnly ? 'مفيش أي حاجة من المحدد ظاهرة تحت الفلتر الحالي.' : 'لا توجد أبواب مطابقة.'}
                     </p>
                   )}
-                  {filteredDoors.map((d) => (
+                  {selectionFilteredDoors.length > 100 && (
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                      ظاهر أول 100 باب بس من {selectionFilteredDoors.length} مطابق. ضيّق الفلتر عشان تشوف الباقي.
+                    </p>
+                  )}
+                  {visibleDoors.map((d) => (
                     <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px' }}>
                       <input type="checkbox" checked={selectedDoors.has(d.id)} onChange={() => toggleDoorSel(d.id)} style={{ width: 20, height: 20 }} />
                       <span className="code-cell">{d.door_code}</span>
                     </label>
                   ))}
                 </div>
-                <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>{selectedDoors.size} باب محدد</p>
+                <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+                  <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 0 }}>{selectedDoors.size} باب محدد</p>
+                  {selectedDoors.size > 0 && (
+                    <button type="button" className={showSelectedOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedOnly((s) => !s)}>
+                      {showSelectedOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
