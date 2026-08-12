@@ -4,6 +4,7 @@ import { fetchAllRows } from '../lib/fetchAll'
 import { REPORT_COLUMNS, emptyColumnTotals } from '../lib/reportColumns'
 import { useAuth } from '../AuthContext'
 import { cairoTodayStr } from '../lib/cairoTime'
+import ProjectSearchBox from '../components/ProjectSearchBox'
 
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -396,15 +397,7 @@ export default function InstallationCard() {
         {error && <div className="alert alert-error">{error}</div>}
         <div className="card">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-            <div className="field">
-              <label>المشروع</label>
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                <option value="">-- اختر مشروعًا --</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-                ))}
-              </select>
-            </div>
+            <ProjectSearchBox projects={projects} value={projectId} onChange={setProjectId} label="المشروع" />
             <div className="field">
               <label>السنة</label>
               <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
