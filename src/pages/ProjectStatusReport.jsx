@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder, itemOrderIndex, variantNoteFrom } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
+import ProjectSearchBox from '../components/ProjectSearchBox'
+import DoorFilter from '../components/DoorFilter'
 
 export default function ProjectStatusReport() {
   const { profile } = useAuth()
@@ -10,6 +12,7 @@ export default function ProjectStatusReport() {
   const [projectId, setProjectId] = useState('')
   const [projectName, setProjectName] = useState('')
   const [rows, setRows] = useState([])
+  const [filteredDoorCodes, setFilteredDoorCodes] = useState(null) // null = لسه DoorFilter مبلّغش، نعرض الكل مؤقتًا
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingRows, setLoadingRows] = useState(false)
   const [error, setError] = useState('')
@@ -25,7 +28,7 @@ export default function ProjectStatusReport() {
     // المخصص عليها فعليًا (فلترة صريحة في الكود، بالإضافة لصلاحيات قاعدة البيانات).
     if (profile.role === 'admin' || profile.is_installations_manager) {
       const { data, error } = await fetchAllRows((from, to) =>
-        supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+        supabase.from('projects').select('id, project_name, project_number, client_name').order('project_name').range(from, to)
       )
       if (error) setError(error.message)
       setProjects(data || [])
@@ -34,7 +37,7 @@ export default function ProjectStatusReport() {
     }
 
     const { data: myAssigns, error: assignErr } = await fetchAllRows((from, to) =>
-      supabase.from('project_assignments').select('project_id, projects(id, project_name, project_number)')
+      supabase.from('project_assignments').select('project_id, projects(id, project_name, project_number, client_name)')
         .eq('user_id', profile.id).eq('is_active', true).range(from, to)
     )
     if (assignErr) { setError(assignErr.message); setLoadingProjects(false); return }
@@ -101,11 +104,34 @@ export default function ProjectStatusReport() {
   const doorsGrouped = useMemo(() => {
     const m = new Map()
     rows.forEach((r) => {
-      if (!m.has(r.door_code)) m.set(r.door_code, { door_code: r.door_code, door_type: r.door_type, location: r.location, items: [] })
+      if (!m.has(r.door_code)) {
+        m.set(r.door_code, {
+          door_code: r.door_code, door_type: r.door_type, location: r.location,
+          order_number: r.order_number, serial: r.serial, building: r.building,
+          floor: r.floor, door_number: r.door_number,
+          items: [],
+        })
+      }
       m.get(r.door_code).items.push(r)
     })
     return Array.from(m.values()).map((d) => ({ ...d, items: sortByItemOrder(d.items, (it) => it.item_type) }))
   }, [rows])
+
+  // فلتر الأبواب الذكي بيشتغل على أبواب هذا المشروع بس (بعد ما اتحدد أصلًا) -
+  // ملخص "الإجمالي لكل بند" فوق بيفضل يعكس المشروع كامل، مش الفلتر، عمدًا
+  const doorsForFilter = useMemo(() => doorsGrouped.map((d) => ({
+    door_code: d.door_code, order_number: d.order_number, serial: d.serial,
+    building: d.building, floor: d.floor, door_number: d.door_number, door_type: d.door_type,
+  })), [doorsGrouped])
+
+  const filteredDoorsGrouped = useMemo(() => {
+    if (filteredDoorCodes === null) return doorsGrouped
+    return doorsGrouped.filter((d) => filteredDoorCodes.has(d.door_code))
+  }, [doorsGrouped, filteredDoorCodes])
+
+  function handleDoorFilterChange(filtered) {
+    setFilteredDoorCodes(new Set(filtered.map((d) => d.door_code)))
+  }
 
   return (
     <div>
@@ -113,18 +139,10 @@ export default function ProjectStatusReport() {
         <h1>موقف تركيبات وتسليمات المشروع</h1>
         {error && <div className="alert alert-error">{error}</div>}
         <div className="card">
-          <div className="field">
-            <label>اختر المشروع</label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
-              <option value="">{loadingProjects ? 'جارِ التحميل...' : '-- اختر مشروعًا --'}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
-              ))}
-            </select>
-            {!loadingProjects && projects.length === 0 && (
-              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>مفيش أي مشروع مخصص لك حاليًا.</p>
-            )}
-          </div>
+          <ProjectSearchBox projects={projects} value={projectId} onChange={setProjectId} />
+          {!loadingProjects && projects.length === 0 && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>مفيش أي مشروع مخصص لك حاليًا.</p>
+          )}
         </div>
       </div>
 
@@ -140,7 +158,10 @@ export default function ProjectStatusReport() {
             <span><span className="dot" style={{ background: 'var(--status-green)' }}></span>تسليم للاستشاري (نهائي)</span>
           </div>
           <div className="card print-compact">
-            <h3 style={{ marginBottom: 8 }}>ملخص إجمالي لكل بند</h3>
+            <h3 style={{ marginBottom: 2 }}>ملخص إجمالي لكل بند</h3>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+              (بيعرض المشروع كامل دايمًا، من غير ما يتأثر بفلتر الأبواب تحت)
+            </p>
             <div style={{ overflowX: 'auto' }}>
               <table>
                 <thead>
@@ -170,22 +191,25 @@ export default function ProjectStatusReport() {
               </table>
             </div>
           </div>
+          <div className="no-print">
+            <DoorFilter doors={doorsForFilter} onFilteredChange={handleDoorFilterChange} />
+          </div>
           <div className="card print-compact">
             <table>
               <thead>
                 <tr>
                   <th>كود الباب</th>
                   <th>النوع</th>
-                  <th>الموقع</th>
+                  <th>المبنى / الدور</th>
                   <th>البنود</th>
                 </tr>
               </thead>
               <tbody>
-                {doorsGrouped.map((d) => (
+                {filteredDoorsGrouped.map((d) => (
                   <tr key={d.door_code}>
                     <td className="code-cell">{d.door_code}</td>
                     <td>{d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}</td>
-                    <td>{d.location || '—'}</td>
+                    <td>{d.building} / {d.floor}</td>
                     <td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {d.items.map((it) => {
@@ -203,6 +227,11 @@ export default function ProjectStatusReport() {
                 ))}
               </tbody>
             </table>
+            {filteredDoorsGrouped.length === 0 && (
+              <p className="no-print" style={{ fontSize: 13, color: 'var(--muted)', padding: '10px 0' }}>
+                مفيش أبواب مطابقة للفلتر الحالي.
+              </p>
+            )}
           </div>
         </>
       )}
