@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder, variantNoteFrom } from '../lib/itemOrder'
 
-function aggregateBy(records, keyFn, variantFn) {
+function aggregateBy(records, keyFn, variantFn = null) {
   const m = new Map()
   records.forEach((r) => {
     const k = keyFn(r) || '—'
@@ -39,6 +39,10 @@ export default function ReportsScreen() {
 
   const [installRecords, setInstallRecords] = useState([])
   const [deliveryRecords, setDeliveryRecords] = useState([])
+  const [selectedInstallIds, setSelectedInstallIds] = useState(new Set())
+  const [showSelectedInstallOnly, setShowSelectedInstallOnly] = useState(false)
+  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState(new Set())
+  const [showSelectedDeliveryOnly, setShowSelectedDeliveryOnly] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [error, setError] = useState('')
@@ -74,8 +78,31 @@ export default function ReportsScreen() {
     setSelectedPersonIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
+  function toggleInstallSelect(id) {
+    setSelectedInstallIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleSelectAllInstall(rows, checked) {
+    setSelectedInstallIds((s) => {
+      const n = new Set(s)
+      rows.forEach((r) => { checked ? n.add(r.installation_id) : n.delete(r.installation_id) })
+      return n
+    })
+  }
+  function toggleDeliverySelect(id) {
+    setSelectedDeliveryIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleSelectAllDelivery(rows, checked) {
+    setSelectedDeliveryIds((s) => {
+      const n = new Set(s)
+      rows.forEach((r) => { checked ? n.add(r.delivery_id) : n.delete(r.delivery_id) })
+      return n
+    })
+  }
+
   async function runReport() {
     setLoading(true); setError(''); setHasRun(true)
+    setSelectedInstallIds(new Set()); setShowSelectedInstallOnly(false)
+    setSelectedDeliveryIds(new Set()); setShowSelectedDeliveryOnly(false)
     try {
       let installData = []
       let deliveryData = []
@@ -136,12 +163,27 @@ export default function ReportsScreen() {
   const installGrouped = groupBy === 'project' ? installByProject : groupBy === 'person' ? installByPerson : installByItem
   const deliveryGrouped = groupBy === 'project' ? deliveryByProject : groupBy === 'person' ? deliveryByPerson : deliveryByItem
 
+  // "التحديد والعزل": التحديد بيقتصر على أول 300 سجل المعروضين (نفس حد العرض
+  // الموجود أصلًا) - لو محتاج تحدد من أكتر، ضيّق الفلتر فوق الأول زي ما بيوضح
+  // نص التنبيه تحت الجدول
+  const visibleInstallRecords = useMemo(() => installRecords.slice(0, 300), [installRecords])
+  const displayedInstallRecords = showSelectedInstallOnly
+    ? visibleInstallRecords.filter((r) => selectedInstallIds.has(r.installation_id))
+    : visibleInstallRecords
+  const allInstallVisibleSelected = visibleInstallRecords.length > 0 && visibleInstallRecords.every((r) => selectedInstallIds.has(r.installation_id))
+
+  const visibleDeliveryRecords = useMemo(() => deliveryRecords.slice(0, 300), [deliveryRecords])
+  const displayedDeliveryRecords = showSelectedDeliveryOnly
+    ? visibleDeliveryRecords.filter((r) => selectedDeliveryIds.has(r.delivery_id))
+    : visibleDeliveryRecords
+  const allDeliveryVisibleSelected = visibleDeliveryRecords.length > 0 && visibleDeliveryRecords.every((r) => selectedDeliveryIds.has(r.delivery_id))
+
   return (
     <div>
-      <h1>التقارير</h1>
-      {error && <div className="alert alert-error">{error}</div>}
+      <h1 className="no-print">التقارير</h1>
+      {error && <div className="alert alert-error no-print">{error}</div>}
 
-      <div className="card">
+      <div className="card no-print">
         <h2 style={{ marginBottom: 12 }}>نوع التقرير</h2>
         <div className="toolbar" style={{ marginBottom: 14 }}>
           <button className={scope === 'installations' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setScope('installations')}>تركيبات فقط</button>
@@ -226,7 +268,7 @@ export default function ReportsScreen() {
                 <h2>ملخص التركيبات</h2>
                 <span className="badge badge-ok">{installTotals.quantity} قطعة · {installTotals.points} نقطة</span>
               </div>
-              <div className="toolbar">
+              <div className="toolbar no-print">
                 <button className={groupBy === 'item' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setGroupBy('item')}>حسب البند</button>
                 <button className={groupBy === 'project' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setGroupBy('project')}>حسب المشروع</button>
                 <button className={groupBy === 'person' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setGroupBy('person')}>حسب الفني/المشرف</button>
@@ -273,19 +315,48 @@ export default function ReportsScreen() {
           )}
 
           <div className="card">
-            <button className="btn-secondary sm" onClick={() => setShowDetail((s) => !s)}>
-              {showDetail ? 'إخفاء التفاصيل' : 'عرض التفاصيل الكاملة (بالباب والمشروع)'}
-            </button>
+            <div className="toolbar no-print" style={{ justifyContent: 'space-between' }}>
+              <button className="btn-secondary sm" onClick={() => setShowDetail((s) => !s)}>
+                {showDetail ? 'إخفاء التفاصيل' : 'عرض التفاصيل الكاملة (بالباب والمشروع)'}
+              </button>
+              {showDetail && (
+                <button className="btn-primary sm" onClick={() => window.print()}>🖨 طباعة</button>
+              )}
+            </div>
 
             {showDetail && (scope === 'installations' || scope === 'both') && installRecords.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <h3>تفاصيل التركيبات</h3>
+                <div className="toolbar no-print" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                  <h3 style={{ marginBottom: 0 }}>تفاصيل التركيبات</h3>
+                  <div className="toolbar">
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      {selectedInstallIds.size > 0 ? `${selectedInstallIds.size} محدد` : ''}
+                    </span>
+                    {selectedInstallIds.size > 0 && (
+                      <button className={showSelectedInstallOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedInstallOnly((s) => !s)}>
+                        {showSelectedInstallOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div style={{ maxHeight: 320, overflow: 'auto' }}>
                   <table>
-                    <thead><tr><th>المشروع</th><th>الباب</th><th>البند</th><th>الكمية</th><th>النقاط</th><th>التاريخ</th><th>الفني</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th className="no-print">
+                          <input type="checkbox" checked={allInstallVisibleSelected}
+                            onChange={(e) => toggleSelectAllInstall(visibleInstallRecords, e.target.checked)} style={{ width: 17, height: 17 }} />
+                        </th>
+                        <th>المشروع</th><th>الباب</th><th>البند</th><th>الكمية</th><th>النقاط</th><th>التاريخ</th><th>الفني</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {installRecords.slice(0, 300).map((r) => (
+                      {displayedInstallRecords.map((r) => (
                         <tr key={r.installation_id}>
+                          <td className="no-print">
+                            <input type="checkbox" checked={selectedInstallIds.has(r.installation_id)}
+                              onChange={() => toggleInstallSelect(r.installation_id)} style={{ width: 17, height: 17 }} />
+                          </td>
                           <td>{r.project_name}</td>
                           <td className="code-cell">{r.door_code}</td>
                           <td>{r.item_type}</td>
@@ -298,7 +369,7 @@ export default function ReportsScreen() {
                     </tbody>
                   </table>
                   {installRecords.length > 300 && (
-                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>...وعدد {installRecords.length - 300} سجل آخر (ضيّق الفلتر لعرض الكل)</p>
+                    <p className="no-print" style={{ fontSize: 12, color: 'var(--muted)' }}>...وعدد {installRecords.length - 300} سجل آخر (ضيّق الفلتر لعرض الكل)</p>
                   )}
                 </div>
               </div>
@@ -306,13 +377,37 @@ export default function ReportsScreen() {
 
             {showDetail && (scope === 'deliveries' || scope === 'both') && deliveryRecords.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <h3>تفاصيل التسليمات</h3>
+                <div className="toolbar no-print" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                  <h3 style={{ marginBottom: 0 }}>تفاصيل التسليمات</h3>
+                  <div className="toolbar">
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      {selectedDeliveryIds.size > 0 ? `${selectedDeliveryIds.size} محدد` : ''}
+                    </span>
+                    {selectedDeliveryIds.size > 0 && (
+                      <button className={showSelectedDeliveryOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedDeliveryOnly((s) => !s)}>
+                        {showSelectedDeliveryOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div style={{ maxHeight: 320, overflow: 'auto' }}>
                   <table>
-                    <thead><tr><th>المشروع</th><th>الباب</th><th>البند</th><th>الكمية</th><th>النوع</th><th>التفاصيل</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th className="no-print">
+                          <input type="checkbox" checked={allDeliveryVisibleSelected}
+                            onChange={(e) => toggleSelectAllDelivery(visibleDeliveryRecords, e.target.checked)} style={{ width: 17, height: 17 }} />
+                        </th>
+                        <th>المشروع</th><th>الباب</th><th>البند</th><th>الكمية</th><th>النوع</th><th>التفاصيل</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {deliveryRecords.slice(0, 300).map((r) => (
+                      {displayedDeliveryRecords.map((r) => (
                         <tr key={r.delivery_id}>
+                          <td className="no-print">
+                            <input type="checkbox" checked={selectedDeliveryIds.has(r.delivery_id)}
+                              onChange={() => toggleDeliverySelect(r.delivery_id)} style={{ width: 17, height: 17 }} />
+                          </td>
                           <td>{r.project_name}</td>
                           <td className="code-cell">{r.door_code}</td>
                           <td>{r.item_type}</td>
@@ -324,7 +419,7 @@ export default function ReportsScreen() {
                     </tbody>
                   </table>
                   {deliveryRecords.length > 300 && (
-                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>...وعدد {deliveryRecords.length - 300} سجل آخر (ضيّق الفلتر لعرض الكل)</p>
+                    <p className="no-print" style={{ fontSize: 12, color: 'var(--muted)' }}>...وعدد {deliveryRecords.length - 300} سجل آخر (ضيّق الفلتر لعرض الكل)</p>
                   )}
                 </div>
               </div>
