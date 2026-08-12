@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import { cairoTodayStr } from '../lib/cairoTime'
+import DoorFilter from '../components/DoorFilter'
 
 export default function DeliveryScreen() {
   const { profile } = useAuth()
@@ -11,9 +12,10 @@ export default function DeliveryScreen() {
   const [deliveryType, setDeliveryType] = useState('client')
   const [clientDate, setClientDate] = useState(cairoTodayStr())
   const [wirCode, setWirCode] = useState('')
-  const [search, setSearch] = useState('')
+  const [filteredDoorCodes, setFilteredDoorCodes] = useState(null) // null = لسه DoorFilter مبلّغش، نعرض الكل مؤقتًا
   const [items, setItems] = useState([])
   const [selected, setSelected] = useState(new Set())
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false)
   const [recent, setRecent] = useState([])
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingItems, setLoadingItems] = useState(false)
@@ -22,7 +24,8 @@ export default function DeliveryScreen() {
   const [notice, setNotice] = useState('')
 
   useEffect(() => { loadProjects(); loadRecent() }, []) // eslint-disable-line
-  useEffect(() => { if (projectId) loadItems() }, [projectId, deliveryType, search]) // eslint-disable-line
+  useEffect(() => { if (projectId) loadItems() }, [projectId, deliveryType]) // eslint-disable-line
+  useEffect(() => { if (selected.size === 0) setShowSelectedOnly(false) }, [selected])
 
   async function loadProjects() {
     setLoadingProjects(true)
@@ -35,11 +38,13 @@ export default function DeliveryScreen() {
   async function loadItems() {
     setLoadingItems(true)
     setError('')
-    const { data, error } = await fetchAllRows((from, to) => {
-      let q = supabase.from('v_deliverable_items').select('*').eq('project_id', projectId).order('door_code')
-      if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
-      return q.range(from, to)
-    })
+    setFilteredDoorCodes(null)
+    // بنجيب كل البنود القابلة للتسليم للمشروع زي ما هي (نفس أهلية v_deliverable_items
+    // بالظبط) - الفلترة على الأوردر/السيريال/المبنى/الدور/النوع بتحصل بعد كده
+    // جوّه المتصفح بواسطة DoorFilter، مش على مستوى الاستعلام
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('v_deliverable_items').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+    )
     if (error) setError(`تحميل البنود القابلة للتسليم: ${error.message}`)
     const filtered = (data || []).filter((it) => (deliveryType === 'client' ? !it.delivered_to_client : !it.delivered_to_consultant))
     setItems(filtered)
@@ -60,14 +65,46 @@ export default function DeliveryScreen() {
   const groupedByDoor = useMemo(() => {
     const m = new Map()
     items.forEach((it) => {
-      if (!m.has(it.door_code)) m.set(it.door_code, { door_code: it.door_code, location: it.location, items: [] })
+      if (!m.has(it.door_code)) {
+        m.set(it.door_code, {
+          door_code: it.door_code, location: it.location,
+          order_number: it.order_number, serial: it.serial, building: it.building,
+          floor: it.floor, door_number: it.door_number, door_type: it.door_type,
+          items: [],
+        })
+      }
       m.get(it.door_code).items.push(it)
     })
     return Array.from(m.values())
   }, [items])
 
+  // فلتر الأبواب الذكي بيشتغل على قائمة البنود القابلة للتسليم اللي فوق بس
+  // (بعد ما v_deliverable_items أصلًا قصرتها على "معتمد ولسه ما اتسلمش لنفس
+  // النوع") - مش بديل عن الأهلية دي
+  const doorsForFilter = useMemo(() => groupedByDoor.map((d) => ({
+    door_code: d.door_code, order_number: d.order_number, serial: d.serial,
+    building: d.building, floor: d.floor, door_number: d.door_number, door_type: d.door_type,
+  })), [groupedByDoor])
+
+  const filteredGroupedDoors = useMemo(() => {
+    if (filteredDoorCodes === null) return groupedByDoor
+    return groupedByDoor.filter((d) => filteredDoorCodes.has(d.door_code))
+  }, [groupedByDoor, filteredDoorCodes])
+
+  // "اعرض المحدد بس" - بيشتغل فوق فلتر الأبواب، بيوري بس الأبواب اللي فيها
+  // بند واحد محدد على الأقل، عشان تقدر تجمّع مجموعة أبواب من فلاتر مختلفة
+  // وتشوفهم مع بعض في مكان واحد قبل ما تسجّل التسليم
+  const selectionFilteredDoors = useMemo(() => {
+    if (!showSelectedOnly) return filteredGroupedDoors
+    return filteredGroupedDoors.filter((d) => d.items.some((it) => selected.has(it.door_item_id)))
+  }, [filteredGroupedDoors, showSelectedOnly, selected])
+
   const MAX_DOORS_SHOWN = 100
-  const visibleDoors = groupedByDoor.slice(0, MAX_DOORS_SHOWN)
+  const visibleDoors = selectionFilteredDoors.slice(0, MAX_DOORS_SHOWN)
+
+  function handleDoorFilterChange(filtered) {
+    setFilteredDoorCodes(new Set(filtered.map((d) => d.door_code)))
+  }
 
   function toggle(id) {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -156,13 +193,13 @@ export default function DeliveryScreen() {
               </div>
             )}
 
-            <div className="field">
-              <label>ابحث عن كود باب</label>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="مثال: D-101" style={{ width: '100%' }} />
-            </div>
           </>
         )}
       </div>
+
+      {projectId && (
+        <DoorFilter doors={doorsForFilter} onFilteredChange={handleDoorFilterChange} />
+      )}
 
       {projectId && (
         <div className="card">
@@ -171,7 +208,9 @@ export default function DeliveryScreen() {
           ) : visibleDoors.length === 0 ? (
             <div className="empty-state">
               <div className="icon">✅</div>
-              كل البنود المُعتمدة في هذا المشروع تم تسليمها بالفعل لهذا النوع (أو لا يوجد أبواب مطابقة للبحث).
+              {showSelectedOnly
+                ? 'مفيش أي حاجة من المحدد ظاهرة تحت الفلتر الحالي.'
+                : 'كل البنود المُعتمدة في هذا المشروع تم تسليمها بالفعل لهذا النوع (أو لا يوجد أبواب مطابقة للفلتر).'}
             </div>
           ) : (
             <>
@@ -196,9 +235,9 @@ export default function DeliveryScreen() {
                   </div>
                 )
               })}
-              {groupedByDoor.length > MAX_DOORS_SHOWN && (
+              {selectionFilteredDoors.length > MAX_DOORS_SHOWN && (
                 <p style={{ fontSize: 12.5, color: 'var(--muted)', textAlign: 'center', marginTop: 10 }}>
-                  بيظهر أول {MAX_DOORS_SHOWN} باب فقط من إجمالي {groupedByDoor.length} — استخدم البحث فوق لتضييق النتائج.
+                  بيظهر أول {MAX_DOORS_SHOWN} باب فقط من إجمالي {selectionFilteredDoors.length} — ضيّق الفلتر فوق لتضييق النتائج.
                 </p>
               )}
 
@@ -206,6 +245,11 @@ export default function DeliveryScreen() {
                 <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                   {selected.size > 0 ? `تم اختيار ${selected.size} بند` : 'اختر البنود اللي تم تسليمها'}
                 </span>
+                {selected.size > 0 && (
+                  <button type="button" className={showSelectedOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedOnly((s) => !s)}>
+                    {showSelectedOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+                  </button>
+                )}
                 <button className="btn-primary" disabled={selected.size === 0 || submitting} onClick={handleSubmit}>
                   {submitting ? 'جارِ الحفظ...' : `تسجيل التسليم (${selected.size})`}
                 </button>
