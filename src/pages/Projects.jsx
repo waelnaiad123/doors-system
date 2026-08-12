@@ -17,7 +17,7 @@ function colLetter(i) {
 
 export default function Projects() {
   const { profile } = useAuth()
-  const canCreate = ['admin', 'data_entry'].includes(profile?.role)
+  const canCreate = profile?.role === 'admin' || (profile?.role === 'data_entry' && !!profile?.can_create_projects)
 
   const [q, setQ] = useState('')
   const [rows, setRows] = useState([])
@@ -36,7 +36,11 @@ export default function Projects() {
     setError('')
     let query = supabase.from('projects').select('*').order('created_at', { ascending: false }).limit(200)
     if (q.trim()) {
-      const term = `%${q.trim()}%`
+      // بنشيل الفاصلة والأقواس قبل ما نحط النص جوه فلتر PostgREST - الفاصلة
+      // تحديدًا ليها معنى خاص (بتفصل بين شروط OR)، فلو سبناها زي ما هي ممكن
+      // نص بحث فيه فاصلة "يهرب" من الشرط المقصود ويأثر على باقي الفلتر
+      const safeTerm = q.trim().replace(/[,()]/g, '')
+      const term = `%${safeTerm}%`
       query = query.or(
         `project_number.ilike.${term},project_name.ilike.${term},client_name.ilike.${term},location_code.ilike.${term}`
       )
