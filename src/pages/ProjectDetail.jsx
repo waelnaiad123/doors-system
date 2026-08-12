@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
+import DoorFilter from '../components/DoorFilter'
 
 // قيم احتياطية لو جدول door_leaf_variant_points مش موجود أو الاستعلام فشل لأي
 // سبب - عشان النقاط متطلعش صفر بالغلط، بترجع لنفس القيم المعروفة زي الأول.
@@ -35,7 +36,7 @@ export default function ProjectDetail() {
       fetchAllRows((from, to) =>
         supabase
           .from('doors')
-          .select('id, door_code, location, door_type, door_items(id, item_type_id, quantity, variant, status, item_types(name))')
+          .select('id, door_code, order_number, serial, building, floor, door_number, door_type, door_items(id, item_type_id, quantity, variant, status, item_types(name))')
           .eq('project_id', projectId)
           .order('door_code')
           .range(from, to)
@@ -51,7 +52,7 @@ export default function ProjectDetail() {
     setLoading(false)
   }
 
-  const existingCodes = useMemo(() => new Set(doors.map((d) => d.door_code)), [doors])
+  const existingSerials = useMemo(() => new Set(doors.map((d) => d.serial)), [doors])
 
   if (loading) return <p style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>
   if (!project) {
@@ -125,7 +126,8 @@ export default function ProjectDetail() {
         <ManualAdd
           projectId={projectId}
           itemTypes={itemTypes}
-          existingCodes={existingCodes}
+          doors={doors}
+          existingSerials={existingSerials}
           onSaved={(msg) => { setNotice(msg); setError(''); loadAll() }}
           onError={(e) => { setError(e); setNotice('') }}
         />
@@ -138,7 +140,7 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'list' && <DoorsList doors={doors} itemTypes={itemTypes} onReload={loadAll} onError={setError} />}
+      {tab === 'list' && <DoorsList doors={doors} itemTypes={itemTypes} variantPoints={variantPoints} onReload={loadAll} onError={setError} />}
     </div>
   )
 }
@@ -148,12 +150,26 @@ export default function ProjectDetail() {
 const VENT_ONLY_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 const VENT_ALLOWED_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 
-function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
-  const [doorCode, setDoorCode] = useState('')
-  const [location, setLocation] = useState('')
+function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onError }) {
+  const [orderNumber, setOrderNumber] = useState('')
+  const [serial, setSerial] = useState('')
+  const [building, setBuilding] = useState('')
+  const [floor, setFloor] = useState('')
+  const [doorNumber, setDoorNumber] = useState('')
   const [doorType, setDoorType] = useState('door')
   const [rows, setRows] = useState([{ item_type_id: '', quantity: 1 }])
   const [saving, setSaving] = useState(false)
+
+  // اقتراحات "اكتب أو اختار" - القيم اللي اتكتبت قبل كده في نفس المشروع بس
+  const orderSuggestions = useMemo(() => [...new Set(doors.map((d) => d.order_number).filter(Boolean))], [doors])
+  const buildingSuggestions = useMemo(() => [...new Set(doors.map((d) => d.building).filter(Boolean))], [doors])
+  const floorSuggestions = useMemo(() => [...new Set(doors.map((d) => d.floor).filter(Boolean))], [doors])
+
+  // معاينة كود الباب اللي هيتولّد تلقائيًا - نفس صيغة الـ trigger بالظبط، بس
+  // للعرض قبل الحفظ. القاعدة هي اللي بتحسم القيمة الفعلية النهائية دايمًا.
+  const codePreview = orderNumber && serial && building && floor && doorNumber
+    ? `${orderNumber}-س${serial}-${building}-${floor}-ب${doorNumber}`
+    : null
 
   const availableItemTypes = doorType === 'vent_window'
     ? itemTypes.filter((t) => VENT_ALLOWED_ITEMS.includes(t.name))
@@ -166,14 +182,24 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
   async function handleSubmit(e) {
     e.preventDefault()
     onError('')
-    const code = doorCode.trim()
-    if (!code) { onError('اكتب كود الباب أولًا'); return }
+    if (!orderNumber.trim() || !serial || !building.trim() || !floor.trim() || !doorNumber) {
+      onError('لازم تملي الخمس خانات: الأوردر، السيريال، المبنى، الدور، رقم الباب')
+      return
+    }
     const validRows = rows.filter((r) => r.item_type_id)
     if (validRows.length === 0) { onError('أضف بندًا واحدًا على الأقل (حلق، ضلفة، أو إكسسوار)'); return }
     setSaving(true)
     const { data: door, error: doorErr } = await supabase
       .from('doors')
-      .upsert({ project_id: projectId, door_code: code, location: location.trim() || null, door_type: doorType }, { onConflict: 'project_id,door_code' })
+      .upsert({
+        project_id: projectId,
+        order_number: orderNumber.trim(),
+        serial: Number(serial),
+        building: building.trim(),
+        floor: floor.trim(),
+        door_number: Number(doorNumber),
+        door_type: doorType,
+      }, { onConflict: 'project_id,serial' })
       .select()
       .single()
 
@@ -187,14 +213,15 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
     setSaving(false)
     if (itemsErr) { onError(itemsErr.message); return }
 
-    onSaved(`تم حفظ الباب "${code}" بعدد ${validRows.length} بند.`)
-    setDoorCode(''); setLocation(''); setDoorType('door'); setRows([{ item_type_id: '', quantity: 1 }])
+    onSaved(`تم حفظ الباب "${door.door_code}" بعدد ${validRows.length} بند.`)
+    setOrderNumber(''); setSerial(''); setBuilding(''); setFloor(''); setDoorNumber(''); setDoorType('door')
+    setRows([{ item_type_id: '', quantity: 1 }])
   }
 
   return (
     <form className="card" onSubmit={handleSubmit}>
-      {doorCode.trim() && existingCodes.has(doorCode.trim()) && (
-        <div className="alert alert-ok">هذا الكود موجود بالفعل — سيتم إضافة/تحديث البنود على نفس الباب.</div>
+      {serial && existingSerials.has(Number(serial)) && (
+        <div className="alert alert-ok">السيريال ده موجود بالفعل — سيتم إضافة/تحديث البنود على نفس الباب.</div>
       )}
       <div className="field">
         <label>نوع البند</label>
@@ -203,16 +230,42 @@ function ManualAdd({ projectId, itemTypes, existingCodes, onSaved, onError }) {
           <button type="button" className={doorType === 'vent_window' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setDoorType('vent_window')}>هواية / شباك</button>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
         <div className="field">
-          <label>كود الباب *</label>
-          <input required value={doorCode} onChange={(e) => setDoorCode(e.target.value)} />
+          <label>رقم الأوردر *</label>
+          <input required list="order-suggestions" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
+          <datalist id="order-suggestions">
+            {orderSuggestions.map((v) => <option key={v} value={v} />)}
+          </datalist>
         </div>
         <div className="field">
-          <label>الموقع / الدور (اختياري)</label>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} />
+          <label>السيريال *</label>
+          <input required type="number" value={serial} onChange={(e) => setSerial(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>المبنى *</label>
+          <input required list="building-suggestions" value={building} onChange={(e) => setBuilding(e.target.value)} />
+          <datalist id="building-suggestions">
+            {buildingSuggestions.map((v) => <option key={v} value={v} />)}
+          </datalist>
+        </div>
+        <div className="field">
+          <label>الدور *</label>
+          <input required list="floor-suggestions" value={floor} onChange={(e) => setFloor(e.target.value)} />
+          <datalist id="floor-suggestions">
+            {floorSuggestions.map((v) => <option key={v} value={v} />)}
+          </datalist>
+        </div>
+        <div className="field">
+          <label>رقم الباب *</label>
+          <input required type="number" value={doorNumber} onChange={(e) => setDoorNumber(e.target.value)} />
         </div>
       </div>
+      {codePreview && (
+        <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: -6, marginBottom: 12 }}>
+          كود الباب هيبقى: <strong style={{ color: 'inherit' }}>{codePreview}</strong>
+        </p>
+      )}
 
       <label>{doorType === 'vent_window' ? 'بنود الهواية/الشباك' : 'بنود الباب (حلق، ضلفة، وكل إكسسوار)'}</label>
       {rows.map((r, i) => (
@@ -254,10 +307,10 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   function downloadTemplate() {
     const wsData = [
-      ['door_code', 'location', 'item_type', 'quantity'],
-      ['D-101', 'الدور الأول', 'حلق', 1],
-      ['D-101', 'الدور الأول', 'ضلفة', 1],
-      ['D-101', 'الدور الأول', 'كالون', 1],
+      ['رقم الأوردر', 'السيريال', 'المبنى', 'الدور', 'رقم الباب', 'item_type', 'quantity'],
+      ['INST-1', 1, 'B1', 'F1', 101, 'حلق', 1],
+      ['INST-1', 1, 'B1', 'F1', 101, 'ضلفة', 1],
+      ['INST-1', 1, 'B1', 'F1', 101, 'كالون', 1],
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), 'الأبواب')
@@ -311,7 +364,9 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   const storageKey = useMemo(() => {
     if (headers.length === 0) return null
-    return 'doors-import-map:' + headers.map((h) => h.label).join('|')
+    // بادئة نسخة جديدة عشان مطابقات الشكل القديم (كود باب واحد مجمّع) ما
+    // تتحمّلش هنا بالغلط وتسبب تعارض مع شكل البيانات الجديد (5 حقول منفصلة)
+    return 'doors-import-map-v2:' + headers.map((h) => h.label).join('|')
   }, [headers])
 
   useEffect(() => {
@@ -323,24 +378,11 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     } catch (e) {
       loaded = null
     }
-    if (loaded && !loaded.doorCodeCols && loaded.doorCodeCol !== undefined) {
-      // توافق مع مطابقة قديمة كانت تعتمد عمود واحد فقط لكود الباب
-      loaded = {
-        ...loaded,
-        doorCodeCols: loaded.doorCodeCol !== '' ? [loaded.doorCodeCol] : [],
-        doorCodeSeparator: '-',
-      }
-    }
-    setMapping(loaded || { doorCodeCols: [], doorCodeSeparator: '-', locationCol: '', items: {} })
+    setMapping(loaded || {
+      orderNumberCol: '', serialCol: '', buildingCol: '', floorCol: '', doorNumberCol: '', items: {},
+    })
   }, [storageKey])
 
-  function addDoorCodeCol(colIdx) {
-    if (colIdx === '') return
-    setMapping((m) => (m.doorCodeCols.includes(colIdx) ? m : { ...m, doorCodeCols: [...m.doorCodeCols, colIdx] }))
-  }
-  function removeDoorCodeCol(colIdx) {
-    setMapping((m) => ({ ...m, doorCodeCols: m.doorCodeCols.filter((c) => c !== colIdx) }))
-  }
   function updateItemMap(itemTypeId, patch) {
     setMapping((m) => ({ ...m, items: { ...m.items, [itemTypeId]: { ...(m.items[itemTypeId] || {}), ...patch } } }))
   }
@@ -352,30 +394,50 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     setTimeout(() => setSavedMsg(''), 5000)
   }
 
-  function buildDoorCode(row, mapping) {
-    const parts = mapping.doorCodeCols
-      .map((colIdx) => {
-        const v = row[colIdx]
-        return v !== undefined && v !== null ? String(v).trim() : ''
-      })
-      .filter((p) => p !== '')
-    return parts.join(mapping.doorCodeSeparator || '-')
+  function strVal(v) { return v !== undefined && v !== null ? String(v).trim() : '' }
+
+  // بيرجع رقم صحيح موجب لو القيمة سليمة، أو null لو فاضية/مش رقم/صفر أو أقل
+  function parseIntSafe(v) {
+    if (v === undefined || v === null || v === '') return null
+    const n = typeof v === 'number' ? v : parseInt(String(v).trim(), 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  // معاينة كود الباب اللي هيتولّد تلقائيًا لصف معيّن - بس للعرض، القاعدة هي
+  // اللي بتحسم القيمة الفعلية دايمًا (نفس صيغة الـ trigger بالظبط)
+  function previewCode(row, m) {
+    const orderNumber = strVal(row[m.orderNumberCol])
+    const serial = parseIntSafe(row[m.serialCol])
+    const building = strVal(row[m.buildingCol])
+    const floor = strVal(row[m.floorCol])
+    const doorNumber = parseIntSafe(row[m.doorNumberCol])
+    if (!orderNumber || !serial || !building || !floor || !doorNumber) return null
+    return `${orderNumber}-س${serial}-${building}-${floor}-ب${doorNumber}`
   }
 
   function buildPreview() {
     onError('')
-    if (!mapping || !mapping.doorCodeCols || mapping.doorCodeCols.length === 0) {
-      onError('حدد عمود واحد على الأقل لتكوين كود الباب')
+    const requiredCols = ['orderNumberCol', 'serialCol', 'buildingCol', 'floorCol', 'doorNumberCol']
+    if (requiredCols.some((k) => mapping[k] === '' || mapping[k] === undefined)) {
+      onError('حدد عمود لكل خانة من الخانات الخمسة: الأوردر، السيريال، المبنى، الدور، رقم الباب')
       return
     }
-    const doorMap = new Map()
+    const doorMap = new Map() // مفتاح الخريطة هو السيريال - المفتاح الحقيقي لتفرد الباب
+    let skippedRows = 0
     dataRows.forEach((row) => {
-      const code = buildDoorCode(row, mapping)
-      if (!code) return
-      const locRaw = mapping.locationCol !== '' ? row[mapping.locationCol] : ''
-      const location = locRaw !== undefined && locRaw !== null ? String(locRaw).trim() : ''
-      if (!doorMap.has(code)) doorMap.set(code, { door_code: code, location, items: [] })
-      const doorEntry = doorMap.get(code)
+      const orderNumber = strVal(row[mapping.orderNumberCol])
+      const serial = parseIntSafe(row[mapping.serialCol])
+      const building = strVal(row[mapping.buildingCol])
+      const floor = strVal(row[mapping.floorCol])
+      const doorNumber = parseIntSafe(row[mapping.doorNumberCol])
+      // لو أي خانة من الخمسة فاضية أو غير سليمة (زي سيريال نصي مش رقم)، نتخطى
+      // الصف ده بدل ما نحفظ باب بيانات ناقصة - ونعدّه عشان نبلّغ المستخدم
+      if (!orderNumber || !serial || !building || !floor || !doorNumber) { skippedRows++; return }
+
+      if (!doorMap.has(serial)) {
+        doorMap.set(serial, { order_number: orderNumber, serial, building, floor, door_number: doorNumber, items: [] })
+      }
+      const doorEntry = doorMap.get(serial)
       itemTypes.forEach((t) => {
         const im = mapping.items[t.id]
         if (!im || !im.mode || im.mode === 'none') return
@@ -399,6 +461,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       doors: doorsArr,
       doorCount: doorsArr.length,
       itemCount: doorsArr.reduce((s, d) => s + d.items.length, 0),
+      skippedRows,
     })
   }
 
@@ -420,14 +483,21 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     onError('')
     try {
       const doorRows = preview.doors.map((d) => ({
-        project_id: projectId, door_code: d.door_code, location: d.location || null,
+        project_id: projectId,
+        order_number: d.order_number,
+        serial: d.serial,
+        building: d.building,
+        floor: d.floor,
+        door_number: d.door_number,
       }))
-      const savedDoors = await upsertInChunks('doors', doorRows, 'project_id,door_code')
-      const idByCode = new Map(savedDoors.map((d) => [d.door_code, d.id]))
+      // السيريال هو مفتاح التفرد الحقيقي جوه المشروع - كود الباب بيتولّد تلقائيًا
+      // بواسطة trigger في القاعدة، فمش محتاجين نبعته إحنا خالص
+      const savedDoors = await upsertInChunks('doors', doorRows, 'project_id,serial')
+      const idBySerial = new Map(savedDoors.map((d) => [d.serial, d.id]))
 
       const itemRows = []
       preview.doors.forEach((d) => {
-        const doorId = idByCode.get(d.door_code)
+        const doorId = idBySerial.get(d.serial)
         d.items.forEach((it) => {
           if (it.item_type_id && doorId) itemRows.push({ door_id: doorId, item_type_id: it.item_type_id, quantity: it.quantity })
         })
@@ -439,7 +509,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       setMapping(null)
       setPreview(null)
     } catch (err) {
-      onError(err.message)
+      onError(`الاستيراد: ${err.message}`)
     } finally {
       setImporting(false)
       setProgress('')
@@ -452,8 +522,8 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
         <>
           <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>
             ارفع ملف الإكسل بتاعك <strong>كما هو تمامًا</strong>، حتى لو شكله معقد وفيه أعمدة كتيرة. في الخطوة
-            الجاية هتحدد إنت أنهي عمود هو كود الباب، وأنهي أعمدة تمثل كل بند (حلق، ضلفة، كالون، مفصلات...).
-            لو معندكش ملف جاهز، فيه نموذج بسيط تقدر تنزّله وتبدأ بيه.
+            الجاية هتحدد إنت أنهي عمود يمثّل كل خانة (رقم الأوردر، السيريال، المبنى، الدور، رقم الباب)، وأنهي
+            أعمدة تمثل كل بند (حلق، ضلفة، كالون، مفصلات...). لو معندكش ملف جاهز، فيه نموذج بسيط تقدر تنزّله وتبدأ بيه.
           </p>
           <div className="toolbar">
             <button type="button" className="btn-secondary" onClick={downloadTemplate}>⬇ تحميل نموذج بسيط</button>
@@ -488,51 +558,48 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
             </table>
           </div>
 
-          <div className="field">
-            <label>كود الباب يتكوّن من أي أعمدة؟ (بالترتيب) *</label>
-            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: -4, marginBottom: 8 }}>
-              مثال: رقم أمر الشغل - اسم المبنى - الدور - رقم الباب. اختر الأعمدة بنفس ترتيبها هنا.
-            </p>
-            {mapping.doorCodeCols.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {mapping.doorCodeCols.map((colIdx, i) => (
-                  <span key={i} className="badge badge-pending">
-                    {i + 1}. {headers[colIdx]?.label || colIdx}
-                    <button
-                      type="button" onClick={() => removeDoorCodeCol(colIdx)}
-                      style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', font: 'inherit' }}
-                    >✕</button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select style={{ flex: 1 }} value="" onChange={(e) => addDoorCodeCol(e.target.value)}>
-                <option value="">+ أضف عمودًا لكود الباب...</option>
-                {headers.filter((h) => !mapping.doorCodeCols.includes(h.idx)).map((h) => (
-                  <option key={h.idx} value={h.idx}>{h.label}</option>
-                ))}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 8 }}>
+            <div className="field">
+              <label>عمود رقم الأوردر *</label>
+              <select value={mapping.orderNumberCol} onChange={(e) => setMapping((m) => ({ ...m, orderNumberCol: e.target.value }))}>
+                <option value="">-- اختر --</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
               </select>
-              <input
-                style={{ width: 70 }} value={mapping.doorCodeSeparator}
-                onChange={(e) => setMapping((m) => ({ ...m, doorCodeSeparator: e.target.value }))}
-                title="الفاصل بين الأجزاء"
-              />
             </div>
-            {mapping.doorCodeCols.length > 0 && dataRows[0] && (
-              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>
-                مثال على النتيجة: <span className="code-cell">{buildDoorCode(dataRows[0], mapping) || '—'}</span>
-              </p>
-            )}
+            <div className="field">
+              <label>عمود السيريال *</label>
+              <select value={mapping.serialCol} onChange={(e) => setMapping((m) => ({ ...m, serialCol: e.target.value }))}>
+                <option value="">-- اختر --</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>عمود المبنى *</label>
+              <select value={mapping.buildingCol} onChange={(e) => setMapping((m) => ({ ...m, buildingCol: e.target.value }))}>
+                <option value="">-- اختر --</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>عمود الدور *</label>
+              <select value={mapping.floorCol} onChange={(e) => setMapping((m) => ({ ...m, floorCol: e.target.value }))}>
+                <option value="">-- اختر --</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>عمود رقم الباب *</label>
+              <select value={mapping.doorNumberCol} onChange={(e) => setMapping((m) => ({ ...m, doorNumberCol: e.target.value }))}>
+                <option value="">-- اختر --</option>
+                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+              </select>
+            </div>
           </div>
-
-          <div className="field">
-            <label>أي عمود هو الموقع/الدور؟ (اختياري)</label>
-            <select value={mapping.locationCol} onChange={(e) => setMapping((m) => ({ ...m, locationCol: e.target.value }))}>
-              <option value="">بدون</option>
-              {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-            </select>
-          </div>
+          {dataRows[0] && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: -4, marginBottom: 14 }}>
+              مثال على النتيجة (أول صف بيانات): <span className="code-cell">{previewCode(dataRows[0], mapping) || 'مكتملش كل الخانات المطلوبة لسه'}</span>
+            </p>
+          )}
 
           <label>مطابقة بنود التركيب (لكل نوع، حدد من أين تُقرأ كميته)</label>
           {itemTypes.map((t) => {
@@ -569,12 +636,21 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           <div className="alert alert-ok">
             تم تجهيز {preview.doorCount} باب بإجمالي {preview.itemCount} بند. راجع العينة قبل التأكيد.
           </div>
+          {preview.skippedRows > 0 && (
+            <div className="alert alert-error">
+              تنبيه: {preview.skippedRows} صف اتخطّى لإنه ناقص خانة أو أكتر من الخمس خانات المطلوبة (أو فيها قيمة
+              مش رقمية في خانة رقمية). راجع الملف لو العدد ده أعلى من المتوقع.
+            </div>
+          )}
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
             <table>
-              <thead><tr><th>كود الباب</th><th>الموقع</th><th>عدد البنود</th></tr></thead>
+              <thead><tr><th>الأوردر</th><th>السيريال</th><th>المبنى</th><th>الدور</th><th>رقم الباب</th><th>عدد البنود</th></tr></thead>
               <tbody>
                 {preview.doors.slice(0, 50).map((d, i) => (
-                  <tr key={i}><td className="code-cell">{d.door_code}</td><td>{d.location || '—'}</td><td>{d.items.length}</td></tr>
+                  <tr key={i}>
+                    <td>{d.order_number}</td><td>{d.serial}</td><td>{d.building}</td>
+                    <td>{d.floor}</td><td>{d.door_number}</td><td>{d.items.length}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -596,29 +672,12 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
 // ---------------------------------------------------------------------------
 
-function DoorsList({ doors, itemTypes, onReload, onError }) {
+function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
-  const [orderFilter, setOrderFilter] = useState('')
-  const [floorFilter, setFloorFilter] = useState('')
-  const [doorNoFilter, setDoorNoFilter] = useState('')
+  const [filteredDoors, setFilteredDoors] = useState(doors)
   const [selected, setSelected] = useState(new Set())
-
-  const filteredDoors = useMemo(() => {
-    const o = orderFilter.trim().toLowerCase()
-    const f = floorFilter.trim().toLowerCase()
-    const n = doorNoFilter.trim().toLowerCase()
-    if (!o && !f && !n) return doors
-    return doors.filter((d) => {
-      const code = d.door_code.toLowerCase()
-      const loc = (d.location || '').toLowerCase()
-      if (o && !code.includes(o)) return false
-      if (f && !code.includes(f) && !loc.includes(f)) return false
-      if (n && !code.includes(n)) return false
-      return true
-    })
-  }, [doors, orderFilter, floorFilter, doorNoFilter])
 
   const allVisibleSelected = filteredDoors.length > 0 && filteredDoors.every((d) => selected.has(d.id))
 
@@ -805,7 +864,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
 
   async function handleVariantChange(doorItem, variant) {
     if (variant === 'sliding') {
-      const ok = window.confirm('تحويل لضلفة باب جرار هيمسح كل باقي بنود هذا الباب (غير الضلفة نفسها) نهائيًا. متأكد؟')
+      const ok = window.confirm('تحويل لضلفة باب جرار هيمسح كل باقي بنود هذا الباب وأي تركيبات تمت عليها نهائيًا (غير الضلفة نفسها). متأكد؟')
       if (!ok) return
     }
     setBusyId(doorItem.door_id)
@@ -858,25 +917,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
           </button>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 4 }}>
-        <div className="field">
-          <label>رقم الأوردر</label>
-          <input value={orderFilter} onChange={(e) => setOrderFilter(e.target.value)} placeholder="مثال: 01" style={{ width: '100%' }} />
-        </div>
-        <div className="field">
-          <label>الدور</label>
-          <input value={floorFilter} onChange={(e) => setFloorFilter(e.target.value)} placeholder="مثال: First Floor" style={{ width: '100%' }} />
-        </div>
-        <div className="field">
-          <label>رقم الباب</label>
-          <input value={doorNoFilter} onChange={(e) => setDoorNoFilter(e.target.value)} placeholder="مثال: 18" style={{ width: '100%' }} />
-        </div>
-      </div>
-      {(orderFilter || floorFilter || doorNoFilter) && (
-        <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 10 }}>
-          {filteredDoors.length} باب مطابق من إجمالي {doors.length}
-        </p>
-      )}
+      <DoorFilter doors={doors} onFilteredChange={setFilteredDoors} />
 
       <table>
         <thead>
@@ -886,7 +927,7 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
                 <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAll(e.target.checked)} />
               </th>
             )}
-            <th>كود الباب</th><th>النوع</th><th>الموقع</th><th>البنود</th><th></th>
+            <th>كود الباب</th><th>السيريال</th><th>النوع</th><th>المبنى / الدور</th><th>البنود</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -898,12 +939,13 @@ function DoorsList({ doors, itemTypes, onReload, onError }) {
                 </td>
               )}
               <td className="code-cell">{d.door_code}</td>
+              <td>{d.serial}</td>
               <td>
                 <span className={d.door_type === 'vent_window' ? 'badge badge-pending' : 'badge badge-empty'}>
                   {d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}
                 </span>
               </td>
-              <td>{d.location || '—'}</td>
+              <td>{d.building} / {d.floor}</td>
               <td>
                 {sortByItemOrder(d.door_items || [], (it) => it.item_types?.name).map((it) => {
                   const isDoorLeaf = it.item_types?.name === 'ضلفة'
