@@ -4,6 +4,7 @@ import { fetchAllRows } from '../lib/fetchAll'
 import { sortByItemOrder } from '../lib/itemOrder'
 import { useAuth } from '../AuthContext'
 import { cairoTodayStr, cairoHour } from '../lib/cairoTime'
+import DoorFilter from '../components/DoorFilter'
 
 function todayStr() {
   return cairoTodayStr()
@@ -18,9 +19,10 @@ export default function TechnicianDaily() {
   const { profile } = useAuth()
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
-  const [search, setSearch] = useState('')
+  const [filteredDoorCodes, setFilteredDoorCodes] = useState(null) // null = لسه DoorFilter مبلّغش، نعرض الكل مؤقتًا
   const [pending, setPending] = useState([])
   const [selected, setSelected] = useState(new Set())
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false)
   const [eligibleDates, setEligibleDates] = useState([])
   const [loadingDates, setLoadingDates] = useState(false)
   const [workDate, setWorkDate] = useState('')
@@ -41,8 +43,9 @@ export default function TechnicianDaily() {
 
   useEffect(() => { loadProjects() }, []) // eslint-disable-line
   useEffect(() => { if (projects.length > 0) { loadWorkforceReminder(); loadToday(); loadUntouchedProjects() } }, [projects]) // eslint-disable-line
-  useEffect(() => { if (projectId) { loadPending(); loadEligibleDates() } }, [projectId, search]) // eslint-disable-line
+  useEffect(() => { if (projectId) { loadPending(); loadEligibleDates() } }, [projectId]) // eslint-disable-line
   useEffect(() => { if (projectId) loadNote() }, [projectId, workDate]) // eslint-disable-line
+  useEffect(() => { if (selected.size === 0) setShowSelectedOnly(false) }, [selected])
 
   async function loadUntouchedProjects() {
     const projectIds = projects.map((p) => p.id)
@@ -150,11 +153,13 @@ export default function TechnicianDaily() {
   async function loadPending() {
     setLoadingPending(true)
     setError('')
-    const { data, error } = await fetchAllRows((from, to) => {
-      let q = supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('door_code')
-      if (search.trim()) q = q.ilike('door_code', `%${search.trim()}%`)
-      return q.range(from, to)
-    })
+    setFilteredDoorCodes(null)
+    // بنجيب كل البنود المعلّقة للمشروع بالكامل زي ما هي (نفس أهلية v_pending_door_items
+    // بالظبط، من غير أي تضييق هنا) - الفلترة على الأوردر/السيريال/المبنى/الدور/النوع
+    // بتحصل بعد كده جوّه المتصفح بواسطة DoorFilter، مش على مستوى الاستعلام
+    const { data, error } = await fetchAllRows((from, to) =>
+      supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+    )
     if (error) setError(`تحميل البنود المعلّقة للمشروع المختار: ${error.message}`)
     setPending(data || [])
     setSelected(new Set())
@@ -177,14 +182,41 @@ export default function TechnicianDaily() {
   const groupedByDoor = useMemo(() => {
     const m = new Map()
     pending.forEach((it) => {
-      if (!m.has(it.door_code)) m.set(it.door_code, { door_code: it.door_code, location: it.location, items: [] })
+      if (!m.has(it.door_code)) {
+        m.set(it.door_code, {
+          door_code: it.door_code, location: it.location,
+          order_number: it.order_number, serial: it.serial, building: it.building,
+          floor: it.floor, door_number: it.door_number, door_type: it.door_type,
+          items: [],
+        })
+      }
       m.get(it.door_code).items.push(it)
     })
     return Array.from(m.values()).map((d) => ({ ...d, items: sortByItemOrder(d.items, (it) => it.item_type) }))
   }, [pending])
 
+  // فلتر الأبواب الذكي بيشتغل على قائمة الأبواب المعلّقة اللي فوق بس (بعد ما
+  // v_pending_door_items أصلًا قصرتها على "لسه ما اتركبتش") - مش بديل عنها
+  const doorsForFilter = useMemo(() => groupedByDoor.map((d) => ({
+    door_code: d.door_code, order_number: d.order_number, serial: d.serial,
+    building: d.building, floor: d.floor, door_number: d.door_number, door_type: d.door_type,
+  })), [groupedByDoor])
+
+  const filteredGroupedDoors = useMemo(() => {
+    if (filteredDoorCodes === null) return groupedByDoor
+    return groupedByDoor.filter((d) => filteredDoorCodes.has(d.door_code))
+  }, [groupedByDoor, filteredDoorCodes])
+
+  // "اعرض المحدد بس" - بيشتغل فوق فلتر الأبواب، بيوري بس الأبواب اللي فيها
+  // بند واحد محدد على الأقل، عشان تقدر تجمّع مجموعة أبواب من فلاتر مختلفة
+  // وتشوفهم مع بعض في مكان واحد قبل ما تسجّل
+  const selectionFilteredDoors = useMemo(() => {
+    if (!showSelectedOnly) return filteredGroupedDoors
+    return filteredGroupedDoors.filter((d) => d.items.some((it) => selected.has(it.door_item_id)))
+  }, [filteredGroupedDoors, showSelectedOnly, selected])
+
   const MAX_DOORS_SHOWN = 100
-  const visibleDoors = groupedByDoor.slice(0, MAX_DOORS_SHOWN)
+  const visibleDoors = selectionFilteredDoors.slice(0, MAX_DOORS_SHOWN)
 
   const enteredProjectIds = useMemo(() => {
     const s = new Set(today.map((r) => r.project_id))
@@ -202,6 +234,10 @@ export default function TechnicianDaily() {
   const untouchedProjects = useMemo(() => {
     return projects.filter((p) => untouchedProjectIds.has(p.id) && !reminderProjects.some((r) => r.id === p.id))
   }, [projects, untouchedProjectIds, reminderProjects])
+
+  function handleDoorFilterChange(filtered) {
+    setFilteredDoorCodes(new Set(filtered.map((d) => d.door_code)))
+  }
 
   function toggle(id) {
     setSelected((s) => {
@@ -330,12 +366,6 @@ export default function TechnicianDaily() {
           </div>
         )}
 
-        {projectId && (
-          <div className="field">
-            <label>ابحث عن كود باب</label>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="مثال: D-101" style={{ width: '100%' }} />
-          </div>
-        )}
       </div>
 
       {projectId && workDate && (
@@ -370,13 +400,19 @@ export default function TechnicianDaily() {
       )}
 
       {projectId && workDate && (
+        <DoorFilter doors={doorsForFilter} onFilteredChange={handleDoorFilterChange} />
+      )}
+
+      {projectId && workDate && (
         <div className="card">
           {loadingPending ? (
             <p style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>
-          ) : groupedByDoor.length === 0 ? (
+          ) : selectionFilteredDoors.length === 0 ? (
             <div className="empty-state">
               <div className="icon">✅</div>
-              كل البنود في هذا المشروع تم تسجيل تركيبها بالفعل (أو لا يوجد أبواب مطابقة للبحث).
+              {showSelectedOnly
+                ? 'مفيش أي حاجة من المحدد ظاهرة تحت الفلتر الحالي.'
+                : 'كل البنود في هذا المشروع تم تسجيل تركيبها بالفعل (أو لا يوجد أبواب مطابقة للفلتر).'}
             </div>
           ) : (
             <>
@@ -409,15 +445,20 @@ export default function TechnicianDaily() {
                   </div>
                 )
               })}
-              {groupedByDoor.length > MAX_DOORS_SHOWN && (
+              {selectionFilteredDoors.length > MAX_DOORS_SHOWN && (
                 <p style={{ fontSize: 12.5, color: 'var(--muted)', textAlign: 'center', marginTop: 10 }}>
-                  بيظهر أول {MAX_DOORS_SHOWN} باب فقط من إجمالي {groupedByDoor.length} — استخدم البحث فوق لتضييق النتائج.
+                  بيظهر أول {MAX_DOORS_SHOWN} باب فقط من إجمالي {selectionFilteredDoors.length} — ضيّق الفلتر فوق لتضييق النتائج.
                 </p>
               )}
               <div className="sticky-action-bar">
                 <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                   {selected.size > 0 ? `تم اختيار ${selected.size} بند` : 'اختر البنود اللي تم تركيبها'}
                 </span>
+                {selected.size > 0 && (
+                  <button type="button" className={showSelectedOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedOnly((s) => !s)}>
+                    {showSelectedOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+                  </button>
+                )}
                 <button className="btn-primary" disabled={selected.size === 0 || submitting} onClick={handleSubmit}>
                   {submitting ? 'جارِ الحفظ...' : `تسجيل التركيب (${selected.size})`}
                 </button>
