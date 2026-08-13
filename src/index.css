@@ -167,6 +167,13 @@ tr:hover td { background: var(--bg); }
   .print-compact { padding: 2px !important; }
   .print-compact table { table-layout: fixed; width: 100%; border-collapse: collapse; }
   .print-compact .print-proj-col { width: 170px !important; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+  /* عمود البنود محتاج أكبر مساحة ممكنة (بيحمل عدة بادجات)، والأعمدة التانية
+     (كود الباب، النوع، المبنى/الدور) محتاجة مساحة أصغر بكتير - بدون التحديد
+     ده، table-layout: fixed كان بيوزّع المساحة بالتساوي على الأربعة، فيخلي
+     عمود البنود ضيق جدًا والبادجات تتكسّر لأسطر كتير من غير داعي */
+  .print-compact .print-items-col { width: 52% !important; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+  .print-compact .print-narrow-col { width: 16% !important; }
+  .print-compact .badge { padding: 1px 5px !important; font-size: 9px !important; gap: 2px !important; }
   .print-compact th {
     font-size: 9px !important;
     padding: 2px 3px !important;
