@@ -182,7 +182,7 @@ function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onEr
   async function handleSubmit(e) {
     e.preventDefault()
     onError('')
-    if (!orderNumber.trim() || !serial || !building.trim() || !floor.trim() || !doorNumber) {
+    if (!orderNumber.trim() || !serial || !building.trim() || !floor.trim() || !doorNumber.trim()) {
       onError('لازم تملي الخمس خانات: الأوردر، السيريال، المبنى، الدور، رقم الباب')
       return
     }
@@ -197,7 +197,7 @@ function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onEr
         serial: Number(serial),
         building: building.trim(),
         floor: floor.trim(),
-        door_number: Number(doorNumber),
+        door_number: doorNumber.trim(),
         door_type: doorType,
       }, { onConflict: 'project_id,serial' })
       .select()
@@ -258,7 +258,7 @@ function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onEr
         </div>
         <div className="field">
           <label>رقم الباب *</label>
-          <input required type="number" value={doorNumber} onChange={(e) => setDoorNumber(e.target.value)} />
+          <input required type="text" value={doorNumber} onChange={(e) => setDoorNumber(e.target.value)} />
         </div>
       </div>
       {codePreview && (
@@ -308,9 +308,9 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
   function downloadTemplate() {
     const wsData = [
       ['رقم الأوردر', 'السيريال', 'المبنى', 'الدور', 'رقم الباب', 'item_type', 'quantity'],
-      ['INST-1', 1, 'B1', 'F1', 101, 'حلق', 1],
-      ['INST-1', 1, 'B1', 'F1', 101, 'ضلفة', 1],
-      ['INST-1', 1, 'B1', 'F1', 101, 'كالون', 1],
+      ['INST-1', 1, 'B1', 'F1', 'D101', 'حلق', 1],
+      ['INST-1', 1, 'B1', 'F1', 'D101', 'ضلفة', 1],
+      ['INST-1', 1, 'B1', 'F1', 'D101', 'كالون', 1],
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), 'الأبواب')
@@ -364,9 +364,9 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   const storageKey = useMemo(() => {
     if (headers.length === 0) return null
-    // بادئة نسخة جديدة عشان مطابقات الشكل القديم (كود باب واحد مجمّع) ما
-    // تتحمّلش هنا بالغلط وتسبب تعارض مع شكل البيانات الجديد (5 حقول منفصلة)
-    return 'doors-import-map-v2:' + headers.map((h) => h.label).join('|')
+    // بادئة نسخة جديدة عشان مطابقات الشكل القديم ما تتحمّلش هنا بالغلط وتسبب
+    // تعارض مع شكل البيانات الجديد (حقل ثابت اختياري للأوردر/المبنى/الدور)
+    return 'doors-import-map-v3:' + headers.map((h) => h.label).join('|')
   }, [headers])
 
   useEffect(() => {
@@ -379,7 +379,12 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
       loaded = null
     }
     setMapping(loaded || {
-      orderNumberCol: '', serialCol: '', buildingCol: '', floorCol: '', doorNumberCol: '', items: {},
+      orderNumberMode: 'column', orderNumberCol: '', orderNumberFixed: '',
+      serialCol: '',
+      buildingMode: 'column', buildingCol: '', buildingFixed: '',
+      floorMode: 'column', floorCol: '', floorFixed: '',
+      doorNumberCol: '',
+      items: {},
     })
   }, [storageKey])
 
@@ -396,40 +401,52 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   function strVal(v) { return v !== undefined && v !== null ? String(v).trim() : '' }
 
-  // بيرجع رقم صحيح موجب لو القيمة سليمة، أو null لو فاضية/مش رقم/صفر أو أقل
+  // بيرجع رقم صحيح موجب لو القيمة سليمة، أو null لو فاضية/مش رقم/صفر أو أقل -
+  // مستخدمة للسيريال بس (الوحيد اللي لازم يكون رقم صافي)
   function parseIntSafe(v) {
     if (v === undefined || v === null || v === '') return null
     const n = typeof v === 'number' ? v : parseInt(String(v).trim(), 10)
     return Number.isFinite(n) && n > 0 ? n : null
   }
 
+  // بيرجّع قيمة الحقل (الأوردر/المبنى/الدور) - إما من عمود في الملف، أو قيمة
+  // ثابتة واحدة بتتكرر لكل الصفوف لو المشروع كله مبنى واحد أو دور واحد مثلًا
+  function fieldValue(row, mode, col, fixed) {
+    if (mode === 'fixed') return strVal(fixed)
+    return strVal(row[col])
+  }
+
   // معاينة كود الباب اللي هيتولّد تلقائيًا لصف معيّن - بس للعرض، القاعدة هي
   // اللي بتحسم القيمة الفعلية دايمًا (نفس صيغة الـ trigger بالظبط)
   function previewCode(row, m) {
-    const orderNumber = strVal(row[m.orderNumberCol])
+    const orderNumber = fieldValue(row, m.orderNumberMode, m.orderNumberCol, m.orderNumberFixed)
     const serial = parseIntSafe(row[m.serialCol])
-    const building = strVal(row[m.buildingCol])
-    const floor = strVal(row[m.floorCol])
-    const doorNumber = parseIntSafe(row[m.doorNumberCol])
+    const building = fieldValue(row, m.buildingMode, m.buildingCol, m.buildingFixed)
+    const floor = fieldValue(row, m.floorMode, m.floorCol, m.floorFixed)
+    const doorNumber = strVal(row[m.doorNumberCol])
     if (!orderNumber || !serial || !building || !floor || !doorNumber) return null
     return `${orderNumber}-س${serial}-${building}-${floor}-ب${doorNumber}`
   }
 
   function buildPreview() {
     onError('')
-    const requiredCols = ['orderNumberCol', 'serialCol', 'buildingCol', 'floorCol', 'doorNumberCol']
-    if (requiredCols.some((k) => mapping[k] === '' || mapping[k] === undefined)) {
-      onError('حدد عمود لكل خانة من الخانات الخمسة: الأوردر، السيريال، المبنى، الدور، رقم الباب')
-      return
-    }
+    if (mapping.orderNumberMode === 'column' && !mapping.orderNumberCol) { onError('حدد عمود رقم الأوردر، أو بدّل لقيمة ثابتة'); return }
+    if (mapping.orderNumberMode === 'fixed' && !mapping.orderNumberFixed.trim()) { onError('اكتب قيمة رقم الأوردر الثابتة'); return }
+    if (!mapping.serialCol) { onError('حدد عمود السيريال'); return }
+    if (mapping.buildingMode === 'column' && !mapping.buildingCol) { onError('حدد عمود المبنى، أو بدّل لقيمة ثابتة'); return }
+    if (mapping.buildingMode === 'fixed' && !mapping.buildingFixed.trim()) { onError('اكتب قيمة المبنى الثابتة'); return }
+    if (mapping.floorMode === 'column' && !mapping.floorCol) { onError('حدد عمود الدور، أو بدّل لقيمة ثابتة'); return }
+    if (mapping.floorMode === 'fixed' && !mapping.floorFixed.trim()) { onError('اكتب قيمة الدور الثابتة'); return }
+    if (!mapping.doorNumberCol) { onError('حدد عمود رقم الباب'); return }
+
     const doorMap = new Map() // مفتاح الخريطة هو السيريال - المفتاح الحقيقي لتفرد الباب
     let skippedRows = 0
     dataRows.forEach((row) => {
-      const orderNumber = strVal(row[mapping.orderNumberCol])
+      const orderNumber = fieldValue(row, mapping.orderNumberMode, mapping.orderNumberCol, mapping.orderNumberFixed)
       const serial = parseIntSafe(row[mapping.serialCol])
-      const building = strVal(row[mapping.buildingCol])
-      const floor = strVal(row[mapping.floorCol])
-      const doorNumber = parseIntSafe(row[mapping.doorNumberCol])
+      const building = fieldValue(row, mapping.buildingMode, mapping.buildingCol, mapping.buildingFixed)
+      const floor = fieldValue(row, mapping.floorMode, mapping.floorCol, mapping.floorFixed)
+      const doorNumber = strVal(row[mapping.doorNumberCol])
       // لو أي خانة من الخمسة فاضية أو غير سليمة (زي سيريال نصي مش رقم)، نتخطى
       // الصف ده بدل ما نحفظ باب بيانات ناقصة - ونعدّه عشان نبلّغ المستخدم
       if (!orderNumber || !serial || !building || !floor || !doorNumber) { skippedRows++; return }
@@ -516,6 +533,29 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     }
   }
 
+  // خانة اختيار عمود من الملف، أو التبديل لقيمة ثابتة واحدة تتكرر لكل
+  // الصفوف - مفيدة للحقول اللي ممكن تتكرر قيمتها في المشروع كله (زي مشروع
+  // كله مبنى واحد أو دور واحد، فمفيش داعي عمود منفصل ليها في الملف أصلًا)
+  function FieldMapper({ label, mode, col, fixed, onModeChange, onColChange, onFixedChange }) {
+    return (
+      <div className="field">
+        <label>{label} *</label>
+        <div className="toolbar" style={{ marginBottom: 6 }}>
+          <button type="button" className={mode === 'column' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('column')}>من عمود</button>
+          <button type="button" className={mode === 'fixed' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('fixed')}>قيمة ثابتة</button>
+        </div>
+        {mode === 'column' ? (
+          <select value={col} onChange={(e) => onColChange(e.target.value)}>
+            <option value="">-- اختر عمود --</option>
+            {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+          </select>
+        ) : (
+          <input value={fixed} onChange={(e) => onFixedChange(e.target.value)} placeholder="نفس القيمة لكل الصفوف" />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="card">
       {!rawSheet && (
@@ -523,7 +563,8 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>
             ارفع ملف الإكسل بتاعك <strong>كما هو تمامًا</strong>، حتى لو شكله معقد وفيه أعمدة كتيرة. في الخطوة
             الجاية هتحدد إنت أنهي عمود يمثّل كل خانة (رقم الأوردر، السيريال، المبنى، الدور، رقم الباب)، وأنهي
-            أعمدة تمثل كل بند (حلق، ضلفة، كالون، مفصلات...). لو معندكش ملف جاهز، فيه نموذج بسيط تقدر تنزّله وتبدأ بيه.
+            أعمدة تمثل كل بند (حلق، ضلفة، كالون، مفصلات...). لو مشروعك كله مبنى واحد أو دور واحد، تقدر تكتب
+            قيمة ثابتة بدل ما تدوّر على عمود ليها. لو معندكش ملف جاهز، فيه نموذج بسيط تقدر تنزّله وتبدأ بيه.
           </p>
           <div className="toolbar">
             <button type="button" className="btn-secondary" onClick={downloadTemplate}>⬇ تحميل نموذج بسيط</button>
@@ -558,14 +599,13 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
             </table>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 8 }}>
-            <div className="field">
-              <label>عمود رقم الأوردر *</label>
-              <select value={mapping.orderNumberCol} onChange={(e) => setMapping((m) => ({ ...m, orderNumberCol: e.target.value }))}>
-                <option value="">-- اختر --</option>
-                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-              </select>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 8 }}>
+            <FieldMapper
+              label="رقم الأوردر" mode={mapping.orderNumberMode} col={mapping.orderNumberCol} fixed={mapping.orderNumberFixed}
+              onModeChange={(v) => setMapping((m) => ({ ...m, orderNumberMode: v }))}
+              onColChange={(v) => setMapping((m) => ({ ...m, orderNumberCol: v }))}
+              onFixedChange={(v) => setMapping((m) => ({ ...m, orderNumberFixed: v }))}
+            />
             <div className="field">
               <label>عمود السيريال *</label>
               <select value={mapping.serialCol} onChange={(e) => setMapping((m) => ({ ...m, serialCol: e.target.value }))}>
@@ -573,20 +613,18 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
                 {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
               </select>
             </div>
-            <div className="field">
-              <label>عمود المبنى *</label>
-              <select value={mapping.buildingCol} onChange={(e) => setMapping((m) => ({ ...m, buildingCol: e.target.value }))}>
-                <option value="">-- اختر --</option>
-                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>عمود الدور *</label>
-              <select value={mapping.floorCol} onChange={(e) => setMapping((m) => ({ ...m, floorCol: e.target.value }))}>
-                <option value="">-- اختر --</option>
-                {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-              </select>
-            </div>
+            <FieldMapper
+              label="المبنى" mode={mapping.buildingMode} col={mapping.buildingCol} fixed={mapping.buildingFixed}
+              onModeChange={(v) => setMapping((m) => ({ ...m, buildingMode: v }))}
+              onColChange={(v) => setMapping((m) => ({ ...m, buildingCol: v }))}
+              onFixedChange={(v) => setMapping((m) => ({ ...m, buildingFixed: v }))}
+            />
+            <FieldMapper
+              label="الدور" mode={mapping.floorMode} col={mapping.floorCol} fixed={mapping.floorFixed}
+              onModeChange={(v) => setMapping((m) => ({ ...m, floorMode: v }))}
+              onColChange={(v) => setMapping((m) => ({ ...m, floorCol: v }))}
+              onFixedChange={(v) => setMapping((m) => ({ ...m, floorFixed: v }))}
+            />
             <div className="field">
               <label>عمود رقم الباب *</label>
               <select value={mapping.doorNumberCol} onChange={(e) => setMapping((m) => ({ ...m, doorNumberCol: e.target.value }))}>
@@ -639,7 +677,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           {preview.skippedRows > 0 && (
             <div className="alert alert-error">
               تنبيه: {preview.skippedRows} صف اتخطّى لإنه ناقص خانة أو أكتر من الخمس خانات المطلوبة (أو فيها قيمة
-              مش رقمية في خانة رقمية). راجع الملف لو العدد ده أعلى من المتوقع.
+              مش رقمية في خانة السيريال). راجع الملف لو العدد ده أعلى من المتوقع.
             </div>
           )}
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
