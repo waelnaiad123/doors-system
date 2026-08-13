@@ -722,8 +722,18 @@ function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [filteredDoors, setFilteredDoors] = useState(doors)
   const [selected, setSelected] = useState(new Set())
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false)
+
+  useEffect(() => { if (selected.size === 0) setShowSelectedOnly(false) }, [selected])
 
   const allVisibleSelected = filteredDoors.length > 0 && filteredDoors.every((d) => selected.has(d.id))
+
+  // "اعرض المحدد بس" - بيشتغل فوق فلتر الأبواب، عشان تقدر تجمّع مجموعة أبواب
+  // من فلاتر مختلفة وتشوفهم مع بعض في مكان واحد
+  const selectionFilteredDoors = useMemo(() => {
+    if (!showSelectedOnly) return filteredDoors
+    return filteredDoors.filter((d) => selected.has(d.id))
+  }, [filteredDoors, showSelectedOnly, selected])
 
   const itemsSummary = useMemo(() => {
     const byType = new Map()
@@ -975,7 +985,7 @@ function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
           </tr>
         </thead>
         <tbody>
-          {filteredDoors.map((d) => (
+          {selectionFilteredDoors.map((d) => (
             <tr key={d.id}>
               {canBulkEdit && (
                 <td>
@@ -1057,13 +1067,19 @@ function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
         </tbody>
       </table>
 
-      {filteredDoors.length === 0 && (
-        <div className="empty-state"><div className="icon">🔍</div>مفيش أبواب مطابقة للبحث.</div>
+      {selectionFilteredDoors.length === 0 && (
+        <div className="empty-state">
+          <div className="icon">🔍</div>
+          {showSelectedOnly ? 'مفيش أي حاجة من المحدد ظاهرة تحت الفلتر الحالي.' : 'مفيش أبواب مطابقة للبحث.'}
+        </div>
       )}
 
       {canBulkEdit && selected.size > 0 && (
         <div className="sticky-action-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>تم اختيار {selected.size} باب</span>
+          <button type="button" className={showSelectedOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedOnly((s) => !s)}>
+            {showSelectedOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
+          </button>
           <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('vent_window')}>
             تحويل الكل لهواية/شباك
           </button>
