@@ -38,7 +38,7 @@ export default function ProjectDetail() {
           .from('doors')
           .select('id, door_code, order_number, serial, building, floor, door_number, door_type, door_items(id, item_type_id, quantity, variant, status, item_types(name))')
           .eq('project_id', projectId)
-          .order('door_code')
+          .order('serial')
           .range(from, to)
       ),
       supabase.from('door_leaf_variant_points').select('variant, points'),
@@ -296,6 +296,33 @@ function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onEr
 // المطابقة يمكن حفظها محليًا (localStorage) وإعادة استخدامها تلقائيًا لملفات
 // أخرى بنفس رؤوس الأعمدة (مفيد جدًا مع مئات الملفات المتشابهة الشكل).
 
+// خانة اختيار عمود من الملف، أو التبديل لقيمة ثابتة واحدة تتكرر لكل الصفوف -
+// مفيدة للحقول اللي ممكن تتكرر قيمتها في المشروع كله (زي مشروع كله مبنى
+// واحد أو دور واحد، فمفيش داعي عمود منفصل ليها في الملف أصلًا).
+// ملحوظة مهمة: القطعة دي لازم تفضل مُعرَّفة هنا (مستقلة، مش جوه ImportFile) -
+// لو اتحطت جوه دالة مكوّن تاني، React بيعيد "خلقها" من الصفر مع كل حرف
+// يتكتب، وده بيفقد التركيز فورًا ويخلي الكتابة تبدو معطوبة (حرف واحد بس في
+// كل مرة) - وده بالظبط الباگ اللي كان موجود قبل كده.
+function FieldMapper({ label, mode, col, fixed, headers, onModeChange, onColChange, onFixedChange }) {
+  return (
+    <div className="field">
+      <label>{label} *</label>
+      <div className="toolbar" style={{ marginBottom: 6 }}>
+        <button type="button" className={mode === 'column' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('column')}>من عمود</button>
+        <button type="button" className={mode === 'fixed' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('fixed')}>قيمة ثابتة</button>
+      </div>
+      {mode === 'column' ? (
+        <select value={col} onChange={(e) => onColChange(e.target.value)}>
+          <option value="">-- اختر عمود --</option>
+          {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
+        </select>
+      ) : (
+        <input value={fixed} onChange={(e) => onFixedChange(e.target.value)} placeholder="نفس القيمة لكل الصفوف" />
+      )}
+    </div>
+  )
+}
+
 function ImportFile({ projectId, itemTypes, onSaved, onError }) {
   const [rawSheet, setRawSheet] = useState(null)
   const [headerRowNum, setHeaderRowNum] = useState(1)
@@ -533,28 +560,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     }
   }
 
-  // خانة اختيار عمود من الملف، أو التبديل لقيمة ثابتة واحدة تتكرر لكل
-  // الصفوف - مفيدة للحقول اللي ممكن تتكرر قيمتها في المشروع كله (زي مشروع
-  // كله مبنى واحد أو دور واحد، فمفيش داعي عمود منفصل ليها في الملف أصلًا)
-  function FieldMapper({ label, mode, col, fixed, onModeChange, onColChange, onFixedChange }) {
-    return (
-      <div className="field">
-        <label>{label} *</label>
-        <div className="toolbar" style={{ marginBottom: 6 }}>
-          <button type="button" className={mode === 'column' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('column')}>من عمود</button>
-          <button type="button" className={mode === 'fixed' ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => onModeChange('fixed')}>قيمة ثابتة</button>
-        </div>
-        {mode === 'column' ? (
-          <select value={col} onChange={(e) => onColChange(e.target.value)}>
-            <option value="">-- اختر عمود --</option>
-            {headers.map((h) => <option key={h.idx} value={h.idx}>{h.label}</option>)}
-          </select>
-        ) : (
-          <input value={fixed} onChange={(e) => onFixedChange(e.target.value)} placeholder="نفس القيمة لكل الصفوف" />
-        )}
-      </div>
-    )
-  }
+
 
   return (
     <div className="card">
@@ -601,7 +607,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 8 }}>
             <FieldMapper
-              label="رقم الأوردر" mode={mapping.orderNumberMode} col={mapping.orderNumberCol} fixed={mapping.orderNumberFixed}
+              label="رقم الأوردر" mode={mapping.orderNumberMode} col={mapping.orderNumberCol} fixed={mapping.orderNumberFixed} headers={headers}
               onModeChange={(v) => setMapping((m) => ({ ...m, orderNumberMode: v }))}
               onColChange={(v) => setMapping((m) => ({ ...m, orderNumberCol: v }))}
               onFixedChange={(v) => setMapping((m) => ({ ...m, orderNumberFixed: v }))}
@@ -614,13 +620,13 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
               </select>
             </div>
             <FieldMapper
-              label="المبنى" mode={mapping.buildingMode} col={mapping.buildingCol} fixed={mapping.buildingFixed}
+              label="المبنى" mode={mapping.buildingMode} col={mapping.buildingCol} fixed={mapping.buildingFixed} headers={headers}
               onModeChange={(v) => setMapping((m) => ({ ...m, buildingMode: v }))}
               onColChange={(v) => setMapping((m) => ({ ...m, buildingCol: v }))}
               onFixedChange={(v) => setMapping((m) => ({ ...m, buildingFixed: v }))}
             />
             <FieldMapper
-              label="الدور" mode={mapping.floorMode} col={mapping.floorCol} fixed={mapping.floorFixed}
+              label="الدور" mode={mapping.floorMode} col={mapping.floorCol} fixed={mapping.floorFixed} headers={headers}
               onModeChange={(v) => setMapping((m) => ({ ...m, floorMode: v }))}
               onColChange={(v) => setMapping((m) => ({ ...m, floorCol: v }))}
               onFixedChange={(v) => setMapping((m) => ({ ...m, floorFixed: v }))}
