@@ -121,7 +121,7 @@ export default function DoorFilter({ doors, onFilteredChange }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
         <div className="field">
           <label>رقم الباب</label>
-          <input type="number" value={doorNumberFilter} onChange={(e) => setDoorNumberFilter(e.target.value)} placeholder="مطابقة تامة" />
+          <input type="text" value={doorNumberFilter} onChange={(e) => setDoorNumberFilter(e.target.value)} placeholder="مطابقة تامة" />
         </div>
         <div className="field">
           <label>السيريال</label>
