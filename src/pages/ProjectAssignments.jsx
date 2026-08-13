@@ -53,7 +53,7 @@ export default function ProjectAssignments() {
 
   async function loadDoors() {
     const { data } = await fetchAllRows((from, to) =>
-      supabase.from('doors').select('id, door_code, order_number, serial, building, floor, door_number, door_type').eq('project_id', projectId).order('door_code').range(from, to)
+      supabase.from('doors').select('id, door_code, order_number, serial, building, floor, door_number, door_type').eq('project_id', projectId).order('serial').range(from, to)
     )
     setDoors(data || [])
   }
