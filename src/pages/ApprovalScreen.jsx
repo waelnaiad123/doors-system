@@ -114,7 +114,7 @@ export default function ApprovalScreen() {
         .select('*')
         .eq('project_id', projectId)
         .in('status', ['pending_review', 'supervisor_approved', 'approved'])
-        .order('door_code')
+        .order('serial')
         .range(from, to)
     )
     if (error) setError(error.message)
