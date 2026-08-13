@@ -52,7 +52,7 @@ export default function ProjectStatusReport() {
     setLoadingRows(true)
     setError('')
     const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('v_door_item_status').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+      supabase.from('v_door_item_status').select('*').eq('project_id', projectId).order('serial').range(from, to)
     )
     if (error) setError(error.message)
     setRows(data || [])
@@ -198,19 +198,19 @@ export default function ProjectStatusReport() {
             <table>
               <thead>
                 <tr>
-                  <th>كود الباب</th>
-                  <th>النوع</th>
-                  <th>المبنى / الدور</th>
-                  <th>البنود</th>
+                  <th className="print-narrow-col">كود الباب</th>
+                  <th className="print-narrow-col">النوع</th>
+                  <th className="print-narrow-col">المبنى / الدور</th>
+                  <th className="print-items-col">البنود</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDoorsGrouped.map((d) => (
                   <tr key={d.door_code}>
-                    <td className="code-cell">{d.door_code}</td>
-                    <td>{d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}</td>
-                    <td>{d.building} / {d.floor}</td>
-                    <td>
+                    <td className="code-cell print-narrow-col">{d.door_code}</td>
+                    <td className="print-narrow-col">{d.door_type === 'vent_window' ? 'هواية/شباك' : 'باب'}</td>
+                    <td className="print-narrow-col">{d.building} / {d.floor}</td>
+                    <td className="print-items-col">
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {d.items.map((it) => {
                           const c = colorOf(it)
