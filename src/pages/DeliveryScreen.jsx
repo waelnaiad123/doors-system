@@ -43,7 +43,7 @@ export default function DeliveryScreen() {
     // بالظبط) - الفلترة على الأوردر/السيريال/المبنى/الدور/النوع بتحصل بعد كده
     // جوّه المتصفح بواسطة DoorFilter، مش على مستوى الاستعلام
     const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('v_deliverable_items').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+      supabase.from('v_deliverable_items').select('*').eq('project_id', projectId).order('serial').range(from, to)
     )
     if (error) setError(`تحميل البنود القابلة للتسليم: ${error.message}`)
     const filtered = (data || []).filter((it) => (deliveryType === 'client' ? !it.delivered_to_client : !it.delivered_to_consultant))
