@@ -151,13 +151,13 @@ export default function DoorFilter({ doors, onFilteredChange }) {
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-        <div className="field">
+        <div className="field" style={{ minWidth: 0 }}>
           <label>رقم الباب</label>
-          <input type="text" value={doorNumberFilter} onChange={(e) => setDoorNumberFilter(e.target.value)} placeholder="مطابقة تامة" />
+          <input type="text" value={doorNumberFilter} onChange={(e) => setDoorNumberFilter(e.target.value)} placeholder="مطابقة تامة" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
         </div>
-        <div className="field">
+        <div className="field" style={{ minWidth: 0 }}>
           <label>السيريال</label>
-          <input type="number" value={serialFilter} onChange={(e) => setSerialFilter(e.target.value)} placeholder="مطابقة تامة" />
+          <input type="number" value={serialFilter} onChange={(e) => setSerialFilter(e.target.value)} placeholder="مطابقة تامة" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
         </div>
         <MultiSelectField label="رقم الأوردر" options={orderOptions} selected={selectedOrders} onChange={setSelectedOrders} />
         <MultiSelectField label="المبنى" options={buildingOptions} selected={selectedBuildings} onChange={setSelectedBuildings} />
