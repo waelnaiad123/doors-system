@@ -36,18 +36,18 @@ function MultiSelectField({ label, options, selected, onChange }) {
   }
 
   return (
-    <div className="field" style={{ position: 'relative' }}>
+    <div className="field" style={{ position: 'relative', minWidth: 0 }}>
       <label>{label}{selected.size > 0 ? ` (${selected.size})` : ''}</label>
       <button
         type="button"
         className="btn-secondary"
-        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}
         onClick={() => setOpen((o) => !o)}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1, textAlign: 'start' }}>
           {selected.size > 0 ? [...selected].join('، ') : '-- الكل --'}
         </span>
-        <span>▾</span>
+        <span style={{ flexShrink: 0 }}>▾</span>
       </button>
       {open && (
         <>
