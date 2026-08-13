@@ -24,10 +24,15 @@ function MultiSelectField({ label, options, selected, onChange }) {
     : options
 
   function toggle(value) {
-    const next = new Set(selected)
-    if (next.has(value)) next.delete(value)
-    else next.add(value)
-    onChange(next)
+    // بنستخدم صيغة "دالة تحديث" بدل ما ناخد القيمة الحالية (selected) ونعدّلها
+    // مباشرة - كده React نفسه بيضمن إنه دايمًا يشتغل على أحدث نسخة من القيمة،
+    // حتى لو حصل تحديثين قريبين من بعض جدًا (زي تعليم علامتين ورا بعض بسرعة)
+    onChange((prevSelected) => {
+      const next = new Set(prevSelected)
+      if (next.has(value)) next.delete(value)
+      else next.add(value)
+      return next
+    })
   }
 
   return (
@@ -87,10 +92,37 @@ export default function DoorFilter({ doors, onFilteredChange }) {
   const [selectedFloors, setSelectedFloors] = useState(new Set())
   const [selectedTypes, setSelectedTypes] = useState(new Set())
 
-  const orderOptions = useMemo(() => buildOptions(doors, 'order_number'), [doors])
-  const buildingOptions = useMemo(() => buildOptions(doors, 'building'), [doors])
-  const floorOptions = useMemo(() => buildOptions(doors, 'floor'), [doors])
-  const typeOptions = useMemo(() => buildOptions(doors, 'door_type', (v) => DOOR_TYPE_LABELS[v] || v), [doors])
+  // بترجع الأبواب المطابقة لكل الفلاتر الشغالة ماعدا الحقل المحدد نفسه -
+  // عشان كل قائمة (زي "الدور") توري بس القيم اللي لسه موجودة فعليًا بعد باقي
+  // الفلاتر، مش كل القيم الممكنة في المشروع كله (نفس سلوك فلتر إكسيل الحقيقي)
+  function doorsMatchingExcept(exceptField) {
+    return doors.filter((d) => {
+      if (doorNumberFilter.trim() && String(d.door_number) !== doorNumberFilter.trim()) return false
+      if (serialFilter.trim() && String(d.serial) !== serialFilter.trim()) return false
+      if (exceptField !== 'order' && selectedOrders.size > 0 && !selectedOrders.has(d.order_number)) return false
+      if (exceptField !== 'building' && selectedBuildings.size > 0 && !selectedBuildings.has(d.building)) return false
+      if (exceptField !== 'floor' && selectedFloors.size > 0 && !selectedFloors.has(d.floor)) return false
+      if (exceptField !== 'type' && selectedTypes.size > 0 && !selectedTypes.has(d.door_type)) return false
+      return true
+    })
+  }
+
+  const orderOptions = useMemo(
+    () => buildOptions(doorsMatchingExcept('order'), 'order_number'),
+    [doors, doorNumberFilter, serialFilter, selectedBuildings, selectedFloors, selectedTypes] // eslint-disable-line
+  )
+  const buildingOptions = useMemo(
+    () => buildOptions(doorsMatchingExcept('building'), 'building'),
+    [doors, doorNumberFilter, serialFilter, selectedOrders, selectedFloors, selectedTypes] // eslint-disable-line
+  )
+  const floorOptions = useMemo(
+    () => buildOptions(doorsMatchingExcept('floor'), 'floor'),
+    [doors, doorNumberFilter, serialFilter, selectedOrders, selectedBuildings, selectedTypes] // eslint-disable-line
+  )
+  const typeOptions = useMemo(
+    () => buildOptions(doorsMatchingExcept('type'), 'door_type', (v) => DOOR_TYPE_LABELS[v] || v),
+    [doors, doorNumberFilter, serialFilter, selectedOrders, selectedBuildings, selectedFloors] // eslint-disable-line
+  )
 
   const filtered = useMemo(() => {
     return doors.filter((d) => {
