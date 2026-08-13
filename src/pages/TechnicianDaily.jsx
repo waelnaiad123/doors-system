@@ -158,7 +158,7 @@ export default function TechnicianDaily() {
     // بالظبط، من غير أي تضييق هنا) - الفلترة على الأوردر/السيريال/المبنى/الدور/النوع
     // بتحصل بعد كده جوّه المتصفح بواسطة DoorFilter، مش على مستوى الاستعلام
     const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('door_code').range(from, to)
+      supabase.from('v_pending_door_items').select('*').eq('project_id', projectId).order('serial').range(from, to)
     )
     if (error) setError(`تحميل البنود المعلّقة للمشروع المختار: ${error.message}`)
     setPending(data || [])
@@ -174,7 +174,7 @@ export default function TechnicianDaily() {
       .select('*')
       .in('project_id', projectIds)
       .eq('installed_at', todayStr())
-      .order('door_code')
+      .order('serial')
     if (error) { setError(`تحميل تركيبات الفريق اليوم: ${error.message}`); return }
     setToday(data || [])
   }
