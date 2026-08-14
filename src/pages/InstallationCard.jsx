@@ -71,17 +71,14 @@ function computeCardData(totalItems, installRows, workforceRows, notesRows, star
   const cumulativeThroughEnd = { totals: emptyTotals(), points: beforeTotals.points + periodTotals.points }
   REPORT_COLUMNS.forEach((c) => { cumulativeThroughEnd.totals[c.key] = beforeTotals.totals[c.key] + periodTotals.totals[c.key] })
 
-  const perItemPoints = {}
-  installRows.forEach((r) => {
-    if (!r.quantity) return
-    const unit = Number(r.points_earned) / Number(r.quantity)
-    if (Number.isFinite(unit)) perItemPoints[`${r.item_type}|${r.variant || ''}`] = unit
-  })
+  // إجمالي نقاط كل بنود المشروع (بغض النظر عن حالة التركيب) - بيستخدم نفس
+  // المعادلة المستخدمة في كل مكان تاني بالظبط (نقطة مخصصة للبند لو موجودة،
+  // وإلا نقطة النوع من الكتالوج) - مش مبني على اللي اتركّب فعليًا، عشان أي
+  // نوع بند لسه ما اتركّبش ولا مرة لسه له نقطته الحقيقية في الإجمالي
   let projectPointsTotal = 0
   totalItems.forEach((r) => {
-    const key = `${r.item_type}|${r.variant || ''}`
-    const unit = perItemPoints[key]
-    if (unit) projectPointsTotal += unit * (Number(r.quantity) || 0)
+    const unit = r.points_override ?? r.catalog_points
+    if (unit) projectPointsTotal += Number(unit) * (Number(r.quantity) || 0)
   })
   projectPointsTotal = Math.round(projectPointsTotal)
 
@@ -93,13 +90,16 @@ function computeCardData(totalItems, installRows, workforceRows, notesRows, star
 
 async function fetchCardRawData(pid) {
   const { data: doorsWithItems, error: e1 } = await fetchAllRows((from, to) =>
-    supabase.from('doors').select('door_items(quantity, variant, item_types(name))').eq('project_id', pid).range(from, to)
+    supabase.from('doors').select('door_items(quantity, variant, points_override, item_types(name, points))').eq('project_id', pid).range(from, to)
   )
   if (e1) throw e1
   const totalItems = []
   ;(doorsWithItems || []).forEach((d) => {
     (d.door_items || []).forEach((it) => {
-      totalItems.push({ item_type: it.item_types?.name, variant: it.variant, quantity: it.quantity })
+      totalItems.push({
+        item_type: it.item_types?.name, variant: it.variant, quantity: it.quantity,
+        points_override: it.points_override, catalog_points: it.item_types?.points,
+      })
     })
   })
 
