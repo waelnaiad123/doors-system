@@ -19,6 +19,8 @@ export default function MonthlyProductivity() {
 
   const [projects, setProjects] = useState([]) // {id, project_name, project_number, supervisor_name}
   const [itemTotals, setItemTotals] = useState({}) // project_id -> {columns, points}
+  const [doorMeta, setDoorMeta] = useState({ catalogPoints: {}, frameLeafQty: {}, idsByProject: {} })
+  const [engineerDoorIds, setEngineerDoorIds] = useState({}) // project_id -> Set(door_id) لو مقسوم، أو undefined لو عام
   const [installedTotals, setInstalledTotals] = useState({}) // project_id -> {columns, points} (through day 20)
   const [workforceTotals, setWorkforceTotals] = useState({}) // project_id -> {allTime, thisMonth} headcount
   const [productivityRows, setProductivityRows] = useState({}) // project_id -> row (this month)
@@ -53,7 +55,7 @@ export default function MonthlyProductivity() {
       const { data: assigns, error: eAssign } = await fetchAllRows((from, to) =>
         supabase
           .from('project_assignments')
-          .select('project_id, projects(id, project_name, project_number)')
+          .select('id, project_id, projects(id, project_name, project_number, final_delivery_status, final_delivery_approved_at)')
           .eq('user_id', selectedEngineerId).eq('role', 'engineer').eq('is_active', true)
           .range(from, to)
       )
@@ -69,36 +71,71 @@ export default function MonthlyProductivity() {
       const supervisorByProject = {}
       ;(supAssigns || []).forEach((s) => { supervisorByProject[s.project_id] = s.profiles?.full_name || '—' })
 
+      const assignmentIdByProject = {}
+      ;(assigns || []).forEach((a) => { if (a.projects) assignmentIdByProject[a.project_id] = a.id })
+
       const projList = (assigns || [])
         .map((a) => a.projects)
         .filter(Boolean)
         .filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i)
-        .map((p) => ({ ...p, supervisor_name: supervisorByProject[p.id] || '—' }))
+        .map((p) => ({ ...p, supervisor_name: supervisorByProject[p.id] || '—', assignment_id: assignmentIdByProject[p.id] }))
       setProjects(projList)
 
       // 2) إجمالي بنود كل مشروع (كمية + نقاط فعلية للبند)
       const { data: doorsWithItems } = await fetchAllRows((from, to) =>
         supabase
           .from('doors')
-          .select('project_id, door_items(quantity, variant, points_override, item_types(name, points))')
+          .select('id, project_id, door_items(quantity, variant, points_override, item_types(name, points))')
           .in('project_id', projectIds)
           .range(from, to)
       )
       const itemTotalsMap = {}
-      projectIds.forEach((id) => { itemTotalsMap[id] = { columns: emptyColumnTotals(), points: 0 } })
+      // بيانات إضافية لكل باب - محتاجينها لحساب نصيب المهندس من نقاط
+      // التسليم (لو مقسوم) ومعادلة حلق/ضلفة × 7
+      const doorCatalogPoints = {} // door_id -> نقاط الكتالوج لبنود الباب ده
+      const doorFrameLeafQty = {} // door_id -> { frameQty, leafQty }
+      const doorIdsByProject = {} // project_id -> [door_id...]
+      projectIds.forEach((id) => { itemTotalsMap[id] = { columns: emptyColumnTotals(), points: 0 }; doorIdsByProject[id] = [] })
       ;(doorsWithItems || []).forEach((d) => {
         const bucket = itemTotalsMap[d.project_id]
         if (!bucket) return
+        doorIdsByProject[d.project_id].push(d.id)
+        doorCatalogPoints[d.id] = 0
+        doorFrameLeafQty[d.id] = { frameQty: 0, leafQty: 0 }
         ;(d.door_items || []).forEach((it) => {
-          const r = { item_type: it.item_types?.name, variant: it.variant }
+          const name = it.item_types?.name
+          const r = { item_type: name, variant: it.variant }
           const col = REPORT_COLUMNS.find((c) => c.match(r))
           const qty = Number(it.quantity) || 0
           const unitPoints = Number(it.points_override ?? it.item_types?.points) || 0
           if (col) bucket.columns[col.key] += qty
           bucket.points += qty * unitPoints
+          doorCatalogPoints[d.id] += qty * unitPoints
+          if (name === 'حلق' || name === 'حلق هواية/شباك') doorFrameLeafQty[d.id].frameQty += qty
+          else if (name === 'ضلفة') doorFrameLeafQty[d.id].leafQty += qty
         })
       })
       setItemTotals(itemTotalsMap)
+      setDoorMeta({ catalogPoints: doorCatalogPoints, frameLeafQty: doorFrameLeafQty, idsByProject: doorIdsByProject })
+
+      // نقاط التسليم بتتوزع بالنسبة والتناسب لو المشروع مقسوم - نجيب هل
+      // لهذا المهندس تحديدًا أبواب متخصصة له في أي من مشاريعه (project_assignment_doors)
+      const assignmentIds = Object.values(assignmentIdByProject).filter(Boolean)
+      const engDoorMap = {}
+      if (assignmentIds.length > 0) {
+        const { data: assignDoors } = await fetchAllRows((from, to) =>
+          supabase.from('project_assignment_doors').select('assignment_id, door_id').in('assignment_id', assignmentIds).range(from, to)
+        )
+        const doorsByAssignment = {}
+        ;(assignDoors || []).forEach((r) => {
+          if (!doorsByAssignment[r.assignment_id]) doorsByAssignment[r.assignment_id] = []
+          doorsByAssignment[r.assignment_id].push(r.door_id)
+        })
+        Object.entries(assignmentIdByProject).forEach(([pid, aid]) => {
+          if (doorsByAssignment[aid]) engDoorMap[pid] = new Set(doorsByAssignment[aid])
+        })
+      }
+      setEngineerDoorIds(engDoorMap)
 
       // 3) ما تم تركيبه واعتماده حتى يوم 20 من الشهر المطلوب
       const cutoff = toISO(year, month, 20)
@@ -180,8 +217,55 @@ export default function MonthlyProductivity() {
     }
   }
 
+  // نصيب المهندس من نقاط التسليم - بس لو المشروع اتسلّم فعليًا، وبس لو تاريخ
+  // الاعتماد نفسه واقع في حدود الشهر المعروض ده أو قبله (نفس مبدأ أي تركيب
+  // حقيقي له تاريخ - ما تظهرش في شهور قبل ما التسليم يحصل فعليًا). بتتحسب
+  // حية دايمًا، مش متخزّنة في أي مكان.
+  // إجمالي نقاط التسليم المتوقعة للمشروع كامل (مش نصيب مهندس معيّن) - نفس
+  // معادلة كارت المتابعة بالظبط، بتتحسب حية دايمًا وتتعرض من أول يوم بغض
+  // النظر عن حالة التسليم الفعلية (إسقاط "لو سلّمنا دلوقتي")
+  function projectDeliveryPointsProjection(projectId) {
+    const doorIds = doorMeta.idsByProject[projectId] || []
+    let total = 0
+    doorIds.forEach((did) => {
+      const fl = doorMeta.frameLeafQty[did] || { frameQty: 0, leafQty: 0 }
+      total += (fl.frameQty > 0 ? fl.frameQty : fl.leafQty) * 7
+    })
+    return total
+  }
+
+  function deliveryPointsShare(projectId) {
+    const project = projects.find((p) => p.id === projectId)
+    if (!project || project.final_delivery_status !== 'delivered' || !project.final_delivery_approved_at) return 0
+
+    const cutoff = toISO(year, month, 20)
+    const approvedDateStr = project.final_delivery_approved_at.slice(0, 10) // YYYY-MM-DD
+    if (approvedDateStr > cutoff) return 0 // التسليم حصل بعد نهاية الفترة المعروضة، لسه ما يظهرش هنا
+
+    const totalDeliveryPoints = projectDeliveryPointsProjection(projectId)
+    const totalProjectPoints = itemTotals[projectId]?.points || 0
+    if (totalProjectPoints <= 0) return 0
+
+    // نصيب المهندس من نقاط الكتالوج - لو معندوش أبواب مخصصة له تحديدًا
+    // (مشروع مش مقسوم)، ياخد المشروع كامل (100%)
+    const myDoorIds = engineerDoorIds[projectId]
+    let myPoints = totalProjectPoints
+    if (myDoorIds) {
+      myPoints = 0
+      myDoorIds.forEach((did) => { myPoints += doorMeta.catalogPoints[did] || 0 })
+    }
+
+    return Math.round((myPoints / totalProjectPoints) * totalDeliveryPoints)
+  }
+
+  // نقاط "مركبة حتى 20" شاملة نصيب التسليم (لو ظهر في حدود الفترة دي) - نفس
+  // معاملة أي بند تركيب حقيقي بالظبط، مش رقم منفصل
+  function installedPointsWithDelivery(projectId) {
+    return (installedTotals[projectId]?.points || 0) + deliveryPointsShare(projectId)
+  }
+
   function suggestedMonthPoints(projectId) {
-    const installedPoints = installedTotals[projectId]?.points || 0
+    const installedPoints = installedPointsWithDelivery(projectId)
     const prevPoints = prevRows[projectId]?.current_points || 0
     return Math.max(0, installedPoints - prevPoints)
   }
@@ -233,7 +317,7 @@ export default function MonthlyProductivity() {
       m.set(key, (m.get(key) || 0) + points)
     })
     return Array.from(m.entries())
-  }, [projects, productivityRows, installedTotals, prevRows]) // eslint-disable-line
+  }, [projects, productivityRows, installedTotals, prevRows, doorMeta, engineerDoorIds, itemTotals]) // eslint-disable-line
 
   const engineerGrandTotal = useMemo(
     () => supervisorTotals.reduce((s, [, v]) => s + v, 0),
@@ -308,7 +392,9 @@ export default function MonthlyProductivity() {
                 <tbody>
                   {projects.map((p) => {
                     const totals = itemTotals[p.id] || { columns: emptyColumnTotals(), points: 0 }
+                    const projectPointsTotal = totals.points + projectDeliveryPointsProjection(p.id)
                     const installed = installedTotals[p.id] || { columns: emptyColumnTotals(), points: 0 }
+                    const installedPointsDisplayed = installedPointsWithDelivery(p.id)
                     const existing = productivityRows[p.id]
                     const prevPoints = prevRows[p.id]?.current_points || 0
                     const monthPoints = existing?.month_points ?? suggestedMonthPoints(p.id)
@@ -322,7 +408,7 @@ export default function MonthlyProductivity() {
                           <td className="print-proj-col">{p.project_number} — {p.project_name}</td>
                           <td title="إجمالي حصر الأفراد من بداية المشروع حتى يوم 20 من هذا الشهر">{workforce.allTime || ''}</td>
                           {REPORT_COLUMNS.map((c) => <td key={c.key}>{totals.columns[c.key] || ''}</td>)}
-                          <td>{Math.round(totals.points)}</td>
+                          <td>{Math.round(projectPointsTotal)}</td>
                           <td colSpan={5}></td>
                         </tr>
                         <tr>
@@ -330,7 +416,7 @@ export default function MonthlyProductivity() {
                           <td title="حصر الأفراد خلال الشهر بس (من يوم 21 الشهر السابق لغاية يوم 20 الحالي)">{workforce.thisMonth || ''}</td>
                           {REPORT_COLUMNS.map((c) => <td key={c.key}>{installed.columns[c.key] || ''}</td>)}
                           <td></td>
-                          <td>{Math.round(installed.points)}</td>
+                          <td>{Math.round(installedPointsDisplayed)}</td>
                           <td>{Math.round(prevPoints)}</td>
                           <td>{Math.round(currentPoints)}</td>
                           <td>
