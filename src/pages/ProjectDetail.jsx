@@ -79,6 +79,18 @@ export default function ProjectDetail() {
             <span className="code-cell">{project.project_number}</span> · {project.client_name || 'بدون عميل'}
             · {doors.length} باب مُضاف
           </div>
+          {project.final_delivery_status === 'delivered' && (
+            <div style={{ marginTop: 4 }}>
+              <span className="badge badge-ok">
+                ✅ تم تسليمه نهائيًا بتاريخ {project.final_delivery_approved_at?.slice(0, 10)} — تم تنزيل نقاطه
+              </span>
+            </div>
+          )}
+          {project.final_delivery_status === 'pending_approval' && (
+            <div style={{ marginTop: 4 }}>
+              <span className="badge badge-pending">⏳ طلب تسليم نهائي بانتظار اعتماد مدير التركيبات</span>
+            </div>
+          )}
         </div>
         {['admin', 'data_entry'].includes(profile.role) && (
           <button
@@ -107,7 +119,7 @@ export default function ProjectDetail() {
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <div className="toolbar">
-        {(profile.role !== 'engineer' || profile.is_installations_manager) && (
+        {(profile.role !== 'engineer' || profile.is_installations_manager) && project.final_delivery_status !== 'delivered' && (
           <>
             <button className={tab === 'manual' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('manual')}>
               إضافة يدوية
@@ -122,7 +134,7 @@ export default function ProjectDetail() {
         </button>
       </div>
 
-      {tab === 'manual' && (profile.role !== 'engineer' || profile.is_installations_manager) && (
+      {tab === 'manual' && (profile.role !== 'engineer' || profile.is_installations_manager) && project.final_delivery_status !== 'delivered' && (
         <ManualAdd
           projectId={projectId}
           itemTypes={itemTypes}
@@ -132,7 +144,7 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'import' && (profile.role !== 'engineer' || profile.is_installations_manager) && (
+      {tab === 'import' && (profile.role !== 'engineer' || profile.is_installations_manager) && project.final_delivery_status !== 'delivered' && (
         <ImportFile
           projectId={projectId}
           itemTypes={itemTypes}
@@ -140,7 +152,7 @@ export default function ProjectDetail() {
           onError={(e) => { setError(e); setNotice('') }}
         />
       )}
-      {tab === 'list' && <DoorsList doors={doors} itemTypes={itemTypes} variantPoints={variantPoints} onReload={loadAll} onError={setError} />}
+      {tab === 'list' && <DoorsList doors={doors} itemTypes={itemTypes} variantPoints={variantPoints} isDelivered={project.final_delivery_status === 'delivered'} onReload={loadAll} onError={setError} />}
     </div>
   )
 }
@@ -716,7 +728,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
 // ---------------------------------------------------------------------------
 
-function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
+function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onError }) {
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -1004,11 +1016,11 @@ function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
                 {sortByItemOrder(d.door_items || [], (it) => it.item_types?.name).map((it) => {
                   const isDoorLeaf = it.item_types?.name === 'ضلفة'
                   const isVentCount = it.item_types?.name === 'عدد الهوايات'
-                  const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role)
-                  const canApproveItem = ['admin', 'engineer'].includes(profile.role)
+                  const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role) && !isDelivered
+                  const canApproveItem = ['admin', 'engineer'].includes(profile.role) && !isDelivered
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
                   const statusCls = it.status === 'approved' ? 'badge-empty' : it.status === 'rejected' ? 'badge-danger' : 'badge-pending'
-                  if (isDoorLeaf && profile.role === 'admin') {
+                  if (isDoorLeaf && profile.role === 'admin' && !isDelivered) {
                     return (
                       <select
                         key={it.id}
@@ -1080,20 +1092,24 @@ function DoorsList({ doors, itemTypes, variantPoints, onReload, onError }) {
           <button type="button" className={showSelectedOnly ? 'btn-primary sm' : 'btn-secondary sm'} onClick={() => setShowSelectedOnly((s) => !s)}>
             {showSelectedOnly ? 'اعرض الكل' : 'اعرض المحدد بس'}
           </button>
-          <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('vent_window')}>
-            تحويل الكل لهواية/شباك
-          </button>
-          <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('door')}>
-            تحويل الكل لباب عادي
-          </button>
-          {profile.role === 'admin' && (
+          {!isDelivered && (
             <>
-              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('large')}>
-                الضلفة كبيرة للكل
+              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('vent_window')}>
+                تحويل الكل لهواية/شباك
               </button>
-              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('sliding')}>
-                الضلفة جرار للكل
+              <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('door')}>
+                تحويل الكل لباب عادي
               </button>
+              {profile.role === 'admin' && (
+                <>
+                  <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('large')}>
+                    الضلفة كبيرة للكل
+                  </button>
+                  <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('sliding')}>
+                    الضلفة جرار للكل
+                  </button>
+                </>
+              )}
             </>
           )}
           <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => setSelected(new Set())}>
