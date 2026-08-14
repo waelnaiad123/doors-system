@@ -23,7 +23,7 @@ export default function WorkforceScreen() {
   async function loadProjects() {
     setLoading(true)
     const { data, error } = await fetchAllRows((from, to) =>
-      supabase.from('projects').select('id, project_name, project_number').order('project_name').range(from, to)
+      supabase.from('projects').select('id, project_name, project_number').neq('final_delivery_status', 'delivered').order('project_name').range(from, to)
     )
     if (error) { setError(error.message); setLoading(false); return }
     const list = data || []
