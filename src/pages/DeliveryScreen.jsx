@@ -22,6 +22,7 @@ export default function DeliveryScreen() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [finalDeliveryBusy, setFinalDeliveryBusy] = useState(false)
 
   useEffect(() => { loadProjects(); loadRecent() }, []) // eslint-disable-line
   useEffect(() => { if (projectId) loadItems() }, [projectId, deliveryType]) // eslint-disable-line
@@ -29,7 +30,9 @@ export default function DeliveryScreen() {
 
   async function loadProjects() {
     setLoadingProjects(true)
-    const { data, error } = await supabase.from('projects').select('id, project_name, project_number').order('project_name')
+    const { data, error } = await supabase.from('projects')
+      .select('id, project_name, project_number, final_delivery_status, final_delivery_requested_at, final_delivery_approved_at, final_delivery_approved_by, profiles!projects_final_delivery_approved_by_fkey(full_name)')
+      .order('project_name')
     if (error) setError(`تحميل قائمة المشاريع: ${error.message}`)
     setProjects(data || [])
     setLoadingProjects(false)
@@ -117,6 +120,54 @@ export default function DeliveryScreen() {
     })
   }
 
+  async function requestFinalDelivery() {
+    if (!projectId) return
+    const ok = window.confirm(
+      'تسجيل "تم تسليم المشروع نهائي" هيبقى محتاج اعتماد مدير التركيبات، وبعد الاعتماد هيتقفل المشروع بالكامل من غير رجوع (مفيش إضافة أبواب أو حصر أفراد أو تركيبات أو تسليمات جديدة عليه تاني). متأكد؟'
+    )
+    if (!ok) return
+    setFinalDeliveryBusy(true)
+    setError(''); setNotice('')
+    try {
+      const { error } = await supabase.from('projects').update({
+        final_delivery_status: 'pending_approval',
+        final_delivery_requested_by: profile.id,
+        final_delivery_requested_at: new Date().toISOString(),
+      }).eq('id', projectId)
+      if (error) throw error
+      setNotice('تم إرسال طلب التسليم النهائي، وبانتظار اعتماد مدير التركيبات.')
+      await loadProjects()
+    } catch (e) {
+      setError(`طلب التسليم النهائي: ${e.message}`)
+    } finally {
+      setFinalDeliveryBusy(false)
+    }
+  }
+
+  async function approveFinalDelivery() {
+    if (!projectId) return
+    const ok = window.confirm(
+      'اعتماد التسليم النهائي هيقفل المشروع بالكامل فورًا من غير رجوع، وهيضيف نقاط التسليم لتقارير المهندسين والمشرفين المعنيين. متأكد؟'
+    )
+    if (!ok) return
+    setFinalDeliveryBusy(true)
+    setError(''); setNotice('')
+    try {
+      const { error } = await supabase.from('projects').update({
+        final_delivery_status: 'delivered',
+        final_delivery_approved_by: profile.id,
+        final_delivery_approved_at: new Date().toISOString(),
+      }).eq('id', projectId)
+      if (error) throw error
+      setNotice('تم اعتماد التسليم النهائي، والمشروع مقفول دلوقتي.')
+      await loadProjects()
+    } catch (e) {
+      setError(`اعتماد التسليم النهائي: ${e.message}`)
+    } finally {
+      setFinalDeliveryBusy(false)
+    }
+  }
+
   async function handleSubmit() {
     if (selected.size === 0) return
     if (deliveryType === 'client' && !clientDate) { setError('حدد تاريخ التسليم'); return }
@@ -154,6 +205,10 @@ export default function DeliveryScreen() {
     await Promise.all(refreshes)
   }
 
+  const selectedProject = projects.find((p) => p.id === projectId)
+  const canRequestFinalDelivery = profile.role === 'data_entry' || profile.role === 'admin'
+  const canApproveFinalDelivery = profile.is_installations_manager || profile.role === 'admin'
+
   return (
     <div>
       <h1>التسليمات</h1>
@@ -166,12 +221,43 @@ export default function DeliveryScreen() {
           <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
             <option value="">{loadingProjects ? 'جارِ التحميل...' : '-- اختر مشروعًا --'}</option>
             {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+              <option key={p.id} value={p.id}>
+                {p.project_number} — {p.project_name}
+                {p.final_delivery_status === 'delivered' ? ' (تم التسليم النهائي)' : ''}
+                {p.final_delivery_status === 'pending_approval' ? ' (⏳ تسليم نهائي معلّق)' : ''}
+              </option>
             ))}
           </select>
         </div>
 
-        {projectId && (
+        {selectedProject?.final_delivery_status === 'delivered' && (
+          <div className="alert alert-ok">
+            ✅ تم تسليم المشروع نهائيًا بتاريخ {selectedProject.final_delivery_approved_at?.slice(0, 10)}
+            {selectedProject.profiles?.full_name ? ` بواسطة ${selectedProject.profiles.full_name}` : ''}.
+            تم إضافة نقاط التسليم لتقارير المهندسين والمشرفين المعنيين، والمشروع مقفول من غير رجوع.
+          </div>
+        )}
+
+        {selectedProject && selectedProject.final_delivery_status === 'pending_approval' && (
+          <div className="alert alert-pending" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span>⏳ فيه طلب تسليم نهائي معلّق لهذا المشروع، بانتظار اعتماد مدير التركيبات.</span>
+            {canApproveFinalDelivery && (
+              <button type="button" className="btn-primary sm" disabled={finalDeliveryBusy} onClick={approveFinalDelivery}>
+                {finalDeliveryBusy ? 'جارِ الاعتماد...' : 'اعتماد التسليم النهائي'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {selectedProject && (!selectedProject.final_delivery_status || selectedProject.final_delivery_status === 'none') && canRequestFinalDelivery && (
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+            <button type="button" className="btn-secondary sm" disabled={finalDeliveryBusy} onClick={requestFinalDelivery}>
+              {finalDeliveryBusy ? 'جارِ الإرسال...' : 'تم تسليم المشروع نهائي'}
+            </button>
+          </div>
+        )}
+
+        {projectId && selectedProject?.final_delivery_status !== 'delivered' && (
           <>
             <div className="field">
               <label>نوع التسليم</label>
