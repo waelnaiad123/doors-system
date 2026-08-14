@@ -83,6 +83,7 @@ export default function Dashboard() {
     const [
       { count: projectsCount }, { count: usersCount }, { data: pendingItems },
       { data: pendingInstalls }, { data: pendingDeliveries }, { data: pendingNotes },
+      { data: pendingFinalDeliveries },
     ] = await Promise.all([
       supabase.from('projects').select('id', { count: 'exact', head: true }),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true),
@@ -90,6 +91,7 @@ export default function Dashboard() {
       fetchAllRows((from, to) => supabase.from('v_installations_detail').select('project_id, project_name, project_number, status').in('status', ['pending_review', 'supervisor_approved']).range(from, to)),
       fetchAllRows((from, to) => supabase.from('v_deliveries_detail').select('project_id, project_name, project_number, status').eq('status', 'pending_review').range(from, to)),
       fetchAllRows((from, to) => supabase.from('daily_project_notes').select('project_id, projects(project_name, project_number)').eq('status', 'pending_review').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('projects').select('id, project_name, project_number').eq('final_delivery_status', 'pending_approval').range(from, to)),
     ])
     setStats([
       { to: '/projects', label: 'إجمالي المشاريع', value: projectsCount ?? '—' },
@@ -98,6 +100,7 @@ export default function Dashboard() {
       { to: '/approval', label: 'تركيبات بانتظار الاعتماد', value: (pendingInstalls || []).length, tone: (pendingInstalls || []).length ? 'warn' : undefined },
       { to: '/approval', label: 'تسليمات بانتظار الاعتماد', value: (pendingDeliveries || []).length, tone: (pendingDeliveries || []).length ? 'warn' : undefined },
       { to: '/approval', label: 'ملاحظات بانتظار الاعتماد', value: (pendingNotes || []).length, tone: (pendingNotes || []).length ? 'warn' : undefined },
+      { to: '/delivery', label: 'طلبات تسليم نهائي بانتظار الاعتماد', value: (pendingFinalDeliveries || []).length, tone: (pendingFinalDeliveries || []).length ? 'warn' : undefined },
     ])
 
     // تفصيل: كام بند/تركيب/تسليم/ملاحظة معلّقة في كل مشروع، ومين المهندس المسؤول عنه
