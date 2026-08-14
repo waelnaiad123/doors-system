@@ -144,7 +144,7 @@ export default function TechnicianDaily() {
   async function loadProjects() {
     setLoadingProjects(true)
     const { data, error } = await supabase
-      .from('projects').select('id, project_name, project_number').order('project_name')
+      .from('projects').select('id, project_name, project_number').neq('final_delivery_status', 'delivered').order('project_name')
     if (error) setError(`تحميل قائمة المشاريع: ${error.message}`)
     setProjects(data || [])
     setLoadingProjects(false)
