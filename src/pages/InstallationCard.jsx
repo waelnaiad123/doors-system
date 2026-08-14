@@ -34,6 +34,25 @@ function dateRangeList(start, end) {
 
 function emptyTotals() { return emptyColumnTotals() }
 
+// نقاط التسليم المتوقعة - نفس المعادلة بالظبط اللي في compute_final_delivery_points
+// (migration 51): لكل باب، لو فيه بند حلق (عادي أو هواية/شباك) بناخد كميته،
+// وإلا (باب جرار، معندوش حلق خالص) بناخد كمية الضلفة بدله - وكل باب ×7،
+// ومجموع كل الأبواب مع بعض.
+function computeDeliveryPointsProjection(totalItems) {
+  const byDoor = new Map()
+  totalItems.forEach((r) => {
+    if (!byDoor.has(r.door_id)) byDoor.set(r.door_id, { frameQty: 0, leafQty: 0 })
+    const d = byDoor.get(r.door_id)
+    if (r.item_type === 'حلق' || r.item_type === 'حلق هواية/شباك') d.frameQty += Number(r.quantity) || 0
+    else if (r.item_type === 'ضلفة') d.leafQty += Number(r.quantity) || 0
+  })
+  let total = 0
+  byDoor.forEach((d) => {
+    total += (d.frameQty > 0 ? d.frameQty : d.leafQty) * 7
+  })
+  return total
+}
+
 function computeCardData(totalItems, installRows, workforceRows, notesRows, start, end, days) {
   const projectTotals = emptyTotals()
   totalItems.forEach((r) => {
@@ -80,6 +99,12 @@ function computeCardData(totalItems, installRows, workforceRows, notesRows, star
     const unit = r.points_override ?? r.catalog_points
     if (unit) projectPointsTotal += Number(unit) * (Number(r.quantity) || 0)
   })
+
+  // نقاط التسليم المتوقعة (لو المشروع اتسلّم دلوقتي بالظبط) - بتتضاف دايمًا
+  // على إجمالي نقاط المشروع، من أول يوم، وبتتحدث تلقائي مع أي تغيير في
+  // البنود. مش مربوطة بحالة التسليم الفعلية للمشروع خالص - ده "إسقاط" مش
+  // نقاط اتسلّمت فعلًا.
+  projectPointsTotal += computeDeliveryPointsProjection(totalItems)
   projectPointsTotal = Math.round(projectPointsTotal)
 
   const periodNotes = notesRows.filter((n) => n.note_date >= start && n.note_date <= end && n.installation_notes && n.status === 'approved')
@@ -90,14 +115,14 @@ function computeCardData(totalItems, installRows, workforceRows, notesRows, star
 
 async function fetchCardRawData(pid) {
   const { data: doorsWithItems, error: e1 } = await fetchAllRows((from, to) =>
-    supabase.from('doors').select('door_items(quantity, variant, points_override, item_types(name, points))').eq('project_id', pid).range(from, to)
+    supabase.from('doors').select('id, door_items(quantity, variant, points_override, item_types(name, points))').eq('project_id', pid).range(from, to)
   )
   if (e1) throw e1
   const totalItems = []
   ;(doorsWithItems || []).forEach((d) => {
     (d.door_items || []).forEach((it) => {
       totalItems.push({
-        item_type: it.item_types?.name, variant: it.variant, quantity: it.quantity,
+        door_id: d.id, item_type: it.item_types?.name, variant: it.variant, quantity: it.quantity,
         points_override: it.points_override, catalog_points: it.item_types?.points,
       })
     })
@@ -151,6 +176,7 @@ function InstallationCardView({ project, period, month, year, start, data, names
               <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>اسم المشروع</strong></td><td style={{ padding: '1px 0' }}>{project.project_name}</td></tr>
               <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>اسم العميل</strong></td><td style={{ padding: '1px 0' }}>{project.client_name || '—'}</td></tr>
               <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>P.O</strong></td><td style={{ padding: '1px 0' }}>{project.project_number}</td></tr>
+              <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>إجمالي نقاط المشروع</strong></td><td style={{ padding: '1px 0' }}>{projectPointsTotal}</td></tr>
               <tr><td style={{ padding: '1px 6px 1px 0' }}><strong>إنتاجية مدة</strong></td><td style={{ padding: '1px 0' }}>{period} / شهر {month}/{year}</td></tr>
             </tbody>
           </table>
