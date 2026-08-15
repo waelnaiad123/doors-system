@@ -113,11 +113,14 @@ function computeCardData(totalItems, installRows, workforceRows, notesRows, star
   return { projectTotals, beforeTotals, dailyData, periodTotals, cumulativeThroughEnd, projectPointsTotal, periodNotes, periodReasons }
 }
 
-async function fetchCardRawData(pid) {
-  const { data: doorsWithItems, error: e1 } = await fetchAllRows((from, to) =>
+// بيانات كل بنود المشروع (بغض النظر عن حالة التركيب) - مشتركة بين عرض الكارت
+// الفردي وطباعة كل الكروت مع بعض، عشان أي تعديل هنا يوصل للاثنين تلقائيًا
+// بدل ما يتكرر في مكانين وينسى تحديث واحد منهم زي ما حصل قبل كده
+async function fetchProjectTotalItems(pid) {
+  const { data: doorsWithItems, error } = await fetchAllRows((from, to) =>
     supabase.from('doors').select('id, door_items(quantity, variant, points_override, item_types(name, points))').eq('project_id', pid).range(from, to)
   )
-  if (e1) throw e1
+  if (error) throw error
   const totalItems = []
   ;(doorsWithItems || []).forEach((d) => {
     (d.door_items || []).forEach((it) => {
@@ -127,6 +130,11 @@ async function fetchCardRawData(pid) {
       })
     })
   })
+  return totalItems
+}
+
+async function fetchCardRawData(pid) {
+  const totalItems = await fetchProjectTotalItems(pid)
 
   const { data: installs, error: e2 } = await fetchAllRows((from, to) =>
     supabase.from('v_installations_detail').select('item_type, variant, quantity, installed_at, points_earned')
@@ -321,20 +329,7 @@ export default function InstallationCard() {
       const p = projects.find((x) => x.id === projectId)
       setProject(p || null)
 
-      const { data: doorsWithItems, error: e1 } = await fetchAllRows((from, to) =>
-        supabase
-          .from('doors')
-          .select('door_items(quantity, variant, item_types(name))')
-          .eq('project_id', projectId)
-          .range(from, to)
-      )
-      if (e1) throw e1
-      const flatItems = []
-      ;(doorsWithItems || []).forEach((d) => {
-        (d.door_items || []).forEach((it) => {
-          flatItems.push({ item_type: it.item_types?.name, variant: it.variant, quantity: it.quantity })
-        })
-      })
+      const flatItems = await fetchProjectTotalItems(projectId)
       setTotalItems(flatItems)
 
       const { data: installs, error: e2 } = await fetchAllRows((from, to) =>
