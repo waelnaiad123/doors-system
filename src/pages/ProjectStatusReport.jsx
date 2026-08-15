@@ -12,6 +12,7 @@ export default function ProjectStatusReport() {
   const [projectId, setProjectId] = useState('')
   const [projectName, setProjectName] = useState('')
   const [rows, setRows] = useState([])
+  const [pointsByDoorItem, setPointsByDoorItem] = useState({}) // door_item_id -> {points_override, catalog_points}
   const [filteredDoorCodes, setFilteredDoorCodes] = useState(null) // null = لسه DoorFilter مبلّغش، نعرض الكل مؤقتًا
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingRows, setLoadingRows] = useState(false)
@@ -58,6 +59,22 @@ export default function ProjectStatusReport() {
     setRows(data || [])
     const p = projects.find((x) => x.id === projectId)
     setProjectName(p ? `${p.project_number} — ${p.project_name}` : '')
+
+    // بيانات النقاط (مخصصة أو من الكتالوج) - نفس الاستعلام المباشر المستخدم
+    // في شاشة تفاصيل المشروع وكارت المتابعة بالظبط، من غير أي تعديل على أي
+    // view - محتاجينها عشان نحسب إجمالي نقاط المشروع وإجمالي نقاط التركيب
+    const { data: doorsWithItems, error: pErr } = await fetchAllRows((from, to) =>
+      supabase.from('doors').select('door_items(id, points_override, item_types(points))').eq('project_id', projectId).range(from, to)
+    )
+    if (pErr) setError(pErr.message)
+    const pointsMap = {}
+    ;(doorsWithItems || []).forEach((d) => {
+      ;(d.door_items || []).forEach((it) => {
+        pointsMap[it.id] = { points_override: it.points_override, catalog_points: it.item_types?.points }
+      })
+    })
+    setPointsByDoorItem(pointsMap)
+
     setLoadingRows(false)
   }
 
@@ -93,6 +110,29 @@ export default function ProjectStatusReport() {
     })
     return m
   }, [rows, itemTypes])
+
+  // إجمالي نقاط المشروع (كتالوج + نقاط تسليم متوقعة حية، بغض النظر عن حالة
+  // التركيب) وإجمالي نقاط تركيب (النقاط المكتسبة فعليًا من البنود المعتمدة
+  // بس) - نفس المعادلات المستخدمة بالظبط في باقي الشاشات
+  const projectPoints = useMemo(() => {
+    let catalogPoints = 0
+    let installedPoints = 0
+    const doorFrameLeaf = new Map()
+    rows.forEach((r) => {
+      const q = Number(r.quantity) || 0
+      const p = pointsByDoorItem[r.door_item_id] || {}
+      const unit = p.points_override ?? p.catalog_points
+      if (unit) catalogPoints += Number(unit) * q
+      if (r.installed && unit) installedPoints += Number(unit) * q
+      if (!doorFrameLeaf.has(r.door_id)) doorFrameLeaf.set(r.door_id, { frameQty: 0, leafQty: 0 })
+      const fl = doorFrameLeaf.get(r.door_id)
+      if (r.item_type === 'حلق' || r.item_type === 'حلق هواية/شباك') fl.frameQty += q
+      else if (r.item_type === 'ضلفة') fl.leafQty += q
+    })
+    let deliveryPoints = 0
+    doorFrameLeaf.forEach((fl) => { deliveryPoints += (fl.frameQty > 0 ? fl.frameQty : fl.leafQty) * 7 })
+    return { total: Math.round(catalogPoints + deliveryPoints), installed: Math.round(installedPoints) }
+  }, [rows, pointsByDoorItem])
 
   function noteFor(t, metric) {
     const variants = summary.get(t).variants
@@ -158,7 +198,13 @@ export default function ProjectStatusReport() {
             <span><span className="dot" style={{ background: 'var(--status-green)' }}></span>تسليم للاستشاري (نهائي)</span>
           </div>
           <div className="card print-compact">
-            <h3 style={{ marginBottom: 2 }}>ملخص إجمالي لكل بند</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 2 }}>
+              <h3 style={{ marginBottom: 0 }}>ملخص إجمالي لكل بند</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span className="badge badge-ok">إجمالي نقاط المشروع: {projectPoints.total}</span>
+                <span className="badge badge-empty">إجمالي نقاط تركيب: {projectPoints.installed}</span>
+              </div>
+            </div>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
               (بيعرض المشروع كامل دايمًا، من غير ما يتأثر بفلتر الأبواب تحت)
             </p>
