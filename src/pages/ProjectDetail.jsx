@@ -36,7 +36,7 @@ export default function ProjectDetail() {
       fetchAllRows((from, to) =>
         supabase
           .from('doors')
-          .select('id, door_code, order_number, serial, building, floor, door_number, door_type, door_items(id, item_type_id, quantity, variant, status, item_types(name))')
+          .select('id, door_code, order_number, serial, building, floor, door_number, door_type, door_items(id, item_type_id, quantity, variant, status, points_override, item_types(name, points))')
           .eq('project_id', projectId)
           .order('serial')
           .range(from, to)
@@ -750,11 +750,20 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
   const itemsSummary = useMemo(() => {
     const byType = new Map()
     let pending = 0, approved = 0, rejected = 0
+    let catalogPoints = 0
+    const doorFrameLeaf = new Map() // door_id -> { frameQty, leafQty } - لحساب نقاط التسليم المتوقعة
     const rejectedList = []
     doors.forEach((d) => {
+      doorFrameLeaf.set(d.id, { frameQty: 0, leafQty: 0 })
       ;(d.door_items || []).forEach((it) => {
         const name = it.item_types?.name || '—'
-        byType.set(name, (byType.get(name) || 0) + Number(it.quantity || 0))
+        const qty = Number(it.quantity || 0)
+        byType.set(name, (byType.get(name) || 0) + qty)
+        const unit = it.points_override ?? it.item_types?.points
+        if (unit) catalogPoints += Number(unit) * qty
+        const fl = doorFrameLeaf.get(d.id)
+        if (name === 'حلق' || name === 'حلق هواية/شباك') fl.frameQty += qty
+        else if (name === 'ضلفة') fl.leafQty += qty
         if (it.status === 'pending_review') pending++
         else if (it.status === 'approved') approved++
         else if (it.status === 'rejected') {
@@ -763,11 +772,13 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
         }
       })
     })
+    let deliveryPoints = 0
+    doorFrameLeaf.forEach((fl) => { deliveryPoints += (fl.frameQty > 0 ? fl.frameQty : fl.leafQty) * 7 })
     const byTypeSorted = sortByItemOrder(
       Array.from(byType.entries()).map(([name, qty]) => ({ name, qty })),
       (it) => it.name
     )
-    return { byType: byTypeSorted, pending, approved, rejected, rejectedList }
+    return { byType: byTypeSorted, pending, approved, rejected, rejectedList, totalPoints: Math.round(catalogPoints + deliveryPoints) }
   }, [doors])
 
   function toggleSelectAll(checked) {
@@ -953,7 +964,10 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
     <div className="card">
       {['admin', 'data_entry', 'engineer'].includes(profile.role) && (
         <div className="card" style={{ background: 'var(--bg)', marginBottom: 14 }}>
-          <h3 style={{ marginBottom: 8 }}>ملخص بنود المشروع</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <h3 style={{ marginBottom: 0 }}>ملخص بنود المشروع</h3>
+            <span className="badge badge-ok">إجمالي نقاط المشروع: {itemsSummary.totalPoints}</span>
+          </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
             {itemsSummary.byType.map((it) => (
               <span key={it.name} className="badge badge-empty">{it.name}: {it.qty}</span>
