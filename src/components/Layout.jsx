@@ -62,6 +62,7 @@ const NAV_BY_ROLE = {
     { to: '/delivery', label: 'التسليمات' },
     { to: '/project-status', label: 'موقف مشروع' },
   ],
+  hr: [],
 }
 
 function ChangePasswordBox({ onClose }) {
