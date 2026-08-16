@@ -5,6 +5,7 @@ export const ROLES = {
   supervisor: 'مشرف',
   engineer: 'مهندس',
   delivery_entry: 'مدخل بيانات تسليمات',
+  hr: 'موارد بشرية',
 }
 
 export const ROLE_LIST = Object.keys(ROLES)
