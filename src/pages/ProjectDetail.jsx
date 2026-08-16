@@ -433,8 +433,12 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
 
   function saveMappingTemplate() {
     if (!storageKey || !mapping) return
-    localStorage.setItem(storageKey, JSON.stringify(mapping))
-    setSavedMsg('تم الحفظ. المرة الجاية اللي ترفع فيها ملف بنفس أسماء الأعمدة، هتتحمّل نفس المطابقة تلقائيًا.')
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(mapping))
+      setSavedMsg('تم الحفظ. المرة الجاية اللي ترفع فيها ملف بنفس أسماء الأعمدة، هتتحمّل نفس المطابقة تلقائيًا.')
+    } catch (e) {
+      setSavedMsg('فشل الحفظ: ' + e.message + ' (جرب تتأكد إن المتصفح مش في وضع التصفح الخاص، أو امسح بيانات تصفح قديمة)')
+    }
     setTimeout(() => setSavedMsg(''), 5000)
   }
 
