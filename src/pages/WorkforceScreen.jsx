@@ -119,7 +119,7 @@ export default function WorkforceScreen() {
   )
 }
 
-function WorkforceRow({ project, entry, busy, locked, isNew, onSave }) {
+export function WorkforceRow({ project, entry, busy, locked, isNew, onSave }) {
   const [headcount, setHeadcount] = useState(entry?.headcount ?? '')
   const [plannedPoints, setPlannedPoints] = useState(entry?.planned_points ?? '')
   const [notes, setNotes] = useState(entry?.notes ?? '')
