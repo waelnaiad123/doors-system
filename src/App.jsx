@@ -22,6 +22,7 @@ const MonthlyProductivity = React.lazy(() => import('./pages/MonthlyProductivity
 const AdminProductivitySummary = React.lazy(() => import('./pages/AdminProductivitySummary'))
 const ProjectsOverview = React.lazy(() => import('./pages/ProjectsOverview'))
 const BackupExport = React.lazy(() => import('./pages/BackupExport'))
+const HRHome = React.lazy(() => import('./pages/HRHome'))
 
 const DEFAULT_ROUTE_BY_ROLE = {
   admin: '/dashboard',
@@ -30,6 +31,7 @@ const DEFAULT_ROUTE_BY_ROLE = {
   supervisor: '/dashboard',
   engineer: '/dashboard',
   delivery_entry: '/dashboard',
+  hr: '/hr',
 }
 
 function RequireAuth({ children }) {
@@ -104,7 +106,14 @@ export default function App() {
                 path="additional-works"
                 element={<RequireRole roles={['admin', 'engineer']}><AdditionalWorks /></RequireRole>}
               />
-              <Route path="dashboard" element={<Dashboard />} />
+              <Route
+                path="dashboard"
+                element={<RequireRole roles={['admin', 'data_entry', 'technician', 'supervisor', 'engineer', 'delivery_entry']}><Dashboard /></RequireRole>}
+              />
+              <Route
+                path="hr"
+                element={<RequireRole roles={['admin', 'hr']}><HRHome /></RequireRole>}
+              />
               <Route
                 path="backup"
                 element={<RequireRole roles={['admin']}><BackupExport /></RequireRole>}
