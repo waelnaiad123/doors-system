@@ -343,6 +343,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
+  const [mappingLoadedFromStorage, setMappingLoadedFromStorage] = useState(false)
 
   function downloadTemplate() {
     const wsData = [
@@ -417,6 +418,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     } catch (e) {
       loaded = null
     }
+    setMappingLoadedFromStorage(!!loaded)
     setMapping(loaded || {
       orderNumberMode: 'column', orderNumberCol: '', orderNumberFixed: '',
       serialCol: '',
@@ -610,7 +612,7 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
             </button>
           </div>
 
-          <div style={{ overflow: 'auto', maxHeight: 130, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14 }}>
+          <div style={{ overflow: 'auto', maxHeight: 130, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 10 }}>
             <table>
               <thead><tr>{headers.map((h) => <th key={h.idx}>{h.label}</th>)}</tr></thead>
               <tbody>
@@ -619,6 +621,13 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className={mappingLoadedFromStorage ? 'alert alert-ok' : 'alert alert-pending'} style={{ fontSize: 12.5, marginBottom: 14 }}>
+            {mappingLoadedFromStorage
+              ? '✓ اتلاقت مطابقة محفوظة لملف بنفس أسماء الأعمدة دي بالظبط، واتحمّلت تلقائيًا تحت.'
+              : 'ℹ️ مفيش مطابقة محفوظة لملف بنفس أسماء الأعمدة دي بالظبط - هتبدأ فاضية.'}
+            {' '}أسماء الأعمدة اللي البرنامج شايفها (صف رقم {headerRowNum}): {headers.map((h) => h.label).join('، ')}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 8 }}>
