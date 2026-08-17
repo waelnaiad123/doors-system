@@ -757,6 +757,7 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
   const { profile } = useAuth()
   const [busyId, setBusyId] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [deleteTypeId, setDeleteTypeId] = useState('')
   const [filteredDoors, setFilteredDoors] = useState(doors)
   const [selected, setSelected] = useState(new Set())
   const [showSelectedOnly, setShowSelectedOnly] = useState(false)
@@ -909,6 +910,30 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
     }
   }
 
+  async function bulkDeletePendingByType(itemTypeId, itemTypeName) {
+    const pendingIds = []
+    doors.forEach((d) => (d.door_items || []).forEach((it) => {
+      if (it.status === 'pending_review' && it.item_type_id === itemTypeId) pendingIds.push(it.id)
+    }))
+    if (pendingIds.length === 0) { onError(`مفيش أي بند معلّق من نوع "${itemTypeName}" في المشروع ده.`); return }
+    const ok = window.confirm(`هيتمسح ${pendingIds.length} بند معلّق من نوع "${itemTypeName}" في المشروع كامل. البنود المعتمدة من النوع ده مش هتتأثر. الإجراء ده مايتراجعش فيه. متأكد؟`)
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      const CHUNK = 150
+      for (let i = 0; i < pendingIds.length; i += CHUNK) {
+        const batch = pendingIds.slice(i, i + CHUNK)
+        const { error } = await supabase.from('door_items').delete().in('id', batch)
+        if (error) throw error
+      }
+      onReload()
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   async function bulkApproveAllPending() {
     const pendingIds = []
     doors.forEach((d) => (d.door_items || []).forEach((it) => { if (it.status === 'pending_review') pendingIds.push(it.id) }))
@@ -1027,6 +1052,22 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
         <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
           <button className="btn-secondary sm" disabled={bulkBusy} onClick={bulkApproveAllPending}>
             اعتماد كل البنود المعلّقة في المشروع
+          </button>
+        </div>
+      )}
+      {['admin', 'data_entry'].includes(profile.role) && !isDelivered && (
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>تصحيح غلطة إدخال جماعية:</span>
+          <select value={deleteTypeId} onChange={(e) => setDeleteTypeId(e.target.value)} style={{ maxWidth: 200 }}>
+            <option value="">-- اختار نوع البند --</option>
+            {itemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <button
+            className="btn-danger sm"
+            disabled={bulkBusy || !deleteTypeId}
+            onClick={() => bulkDeletePendingByType(deleteTypeId, itemTypes.find((t) => t.id === deleteTypeId)?.name || '')}
+          >
+            🗑️ امسح كل النسخ المعلّقة من النوع ده في المشروع كامل
           </button>
         </div>
       )}
