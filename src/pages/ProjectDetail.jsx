@@ -1101,6 +1101,12 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
       })()}
       <DoorFilter doors={doors} onFilteredChange={setFilteredDoors} />
 
+      {canBulkEdit && selected.size > 0 && (
+        <div className="alert alert-ok" style={{ fontSize: 15, fontWeight: 700, textAlign: 'center' }}>
+          ✅ محدد دلوقتي: {selected.size} باب
+        </div>
+      )}
+
       <table>
         <thead>
           <tr>
