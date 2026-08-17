@@ -24,6 +24,7 @@ export default function ProjectDetail() {
   const [tab, setTab] = useState(profile.role === 'engineer' && !profile.is_installations_manager ? 'list' : 'manual')
   const [editingInfo, setEditingInfo] = useState(false)
   const [clientNameInput, setClientNameInput] = useState('')
+  const [locationCodeInput, setLocationCodeInput] = useState('')
 
   useEffect(() => { loadAll() }, [projectId]) // eslint-disable-line
 
@@ -62,7 +63,7 @@ export default function ProjectDetail() {
   async function saveProjectInfo() {
     const { error } = await supabase
       .from('projects')
-      .update({ client_name: clientNameInput || null })
+      .update({ client_name: clientNameInput || null, location_code: locationCodeInput || null })
       .eq('id', projectId)
     if (error) { setError(error.message); return }
     setEditingInfo(false)
@@ -97,6 +98,7 @@ export default function ProjectDetail() {
             className="btn-secondary sm"
             onClick={() => {
               setClientNameInput(project.client_name || '')
+              setLocationCodeInput(project.location_code || '')
               setEditingInfo((s) => !s)
             }}
           >
@@ -110,6 +112,10 @@ export default function ProjectDetail() {
           <div className="field">
             <label>اسم العميل</label>
             <input value={clientNameInput} onChange={(e) => setClientNameInput(e.target.value)} style={{ width: '100%' }} />
+          </div>
+          <div className="field">
+            <label>كود المكان</label>
+            <input value={locationCodeInput} onChange={(e) => setLocationCodeInput(e.target.value)} style={{ width: '100%' }} />
           </div>
           <button className="btn-primary" onClick={saveProjectInfo}>حفظ</button>
         </div>
@@ -406,7 +412,13 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
     if (headers.length === 0) return null
     // بادئة نسخة جديدة عشان مطابقات الشكل القديم ما تتحمّلش هنا بالغلط وتسبب
     // تعارض مع شكل البيانات الجديد (حقل ثابت اختياري للأوردر/المبنى/الدور)
-    return 'doors-import-map-v3:' + headers.map((h) => h.label).join('|')
+    // ----------------------------------------------------------------------
+    // تطبيع كل المسافات (مش بس الأول والآخر زي trim) لمسافة عادية واحدة، عشان
+    // مسافات غير عادية جوّه النص (زي مسافة غير قابلة للكسر لو جاية من نسخ من
+    // PDF أو برنامج تاني) - متطابقة تمامًا للعين في إكسل - متخليش الملف
+    // يتعامل معاه كملف مختلف كليًا
+    const normalizeLabel = (s) => s.normalize('NFC').replace(/\s+/g, ' ').trim()
+    return 'doors-import-map-v3:' + headers.map((h) => normalizeLabel(h.label)).join('|')
   }, [headers])
 
   useEffect(() => {
@@ -931,6 +943,14 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
     onReload()
   }
 
+  async function handleDeleteItem(itemId, itemLabel) {
+    const ok = window.confirm(`متأكد إنك عايز تمسح "${itemLabel}"؟ الإجراء ده مايتراجعش فيه.`)
+    if (!ok) return
+    const { error } = await supabase.from('door_items').delete().eq('id', itemId)
+    if (error) { onError(error.message); return }
+    onReload()
+  }
+
   async function handleQuantityChange(doorItemId, newQty) {
     const q = Number(newQty)
     if (!Number.isFinite(q) || q < 1) return
@@ -1045,6 +1065,7 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                   const isVentCount = it.item_types?.name === 'عدد الهوايات'
                   const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role) && !isDelivered
                   const canApproveItem = ['admin', 'engineer'].includes(profile.role) && !isDelivered
+                  const canDeletePending = ['admin', 'data_entry'].includes(profile.role) && !isDelivered && it.status === 'pending_review'
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
                   const statusCls = it.status === 'approved' ? 'badge-empty' : it.status === 'rejected' ? 'badge-danger' : 'badge-pending'
                   if (isDoorLeaf && profile.role === 'admin' && !isDelivered) {
@@ -1078,6 +1099,9 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                             <button type="button" title="رفض" onClick={() => handleItemApproval(it.id, 'rejected')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>❌</button>
                           </>
                         )}
+                        {canDeletePending && (
+                          <button type="button" title="حذف (غلطة إدخال)" onClick={() => handleDeleteItem(it.id, `عدد الهوايات × ${it.quantity}`)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>🗑️</button>
+                        )}
                       </span>
                     )
                   }
@@ -1089,6 +1113,9 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                           <button type="button" title="اعتماد" onClick={() => handleItemApproval(it.id, 'approved')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>✅</button>
                           <button type="button" title="رفض" onClick={() => handleItemApproval(it.id, 'rejected')} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>❌</button>
                         </>
+                      )}
+                      {canDeletePending && (
+                        <button type="button" title="حذف (غلطة إدخال)" onClick={() => handleDeleteItem(it.id, `${it.item_types?.name} × ${it.quantity}`)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>🗑️</button>
                       )}
                     </span>
                   )
