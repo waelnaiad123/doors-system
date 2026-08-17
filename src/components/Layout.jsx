@@ -85,7 +85,7 @@ function ChangePasswordBox({ onClose }) {
   }
 
   return (
-    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 10, marginTop: 8 }}>
+    <div className="change-password-box" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 10, marginTop: 8 }}>
       {done ? (
         <div style={{ fontSize: 12.5, color: '#7ee0a0' }}>تم تغيير كلمة السر بنجاح.</div>
       ) : (
