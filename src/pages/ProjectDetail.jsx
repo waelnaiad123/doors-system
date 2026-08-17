@@ -1219,18 +1219,18 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
           {!isDelivered && (
             <>
               <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('vent_window')}>
-                تحويل الكل لهواية/شباك
+                تحويل المحدد لهواية/شباك
               </button>
               <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('door')}>
-                تحويل الكل لباب عادي
+                تحويل المحدد لباب عادي
               </button>
               {['admin', 'data_entry'].includes(profile.role) && (
                 <>
                   <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('large')}>
-                    الضلفة كبيرة للكل
+                    الضلفة كبيرة للمحدد
                   </button>
                   <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('sliding')}>
-                    الضلفة جرار للكل
+                    الضلفة جرار للمحدد
                   </button>
                 </>
               )}
