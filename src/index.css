@@ -173,7 +173,9 @@ tr:hover td { background: var(--bg); }
      عمود البنود ضيق جدًا والبادجات تتكسّر لأسطر كتير من غير داعي */
   .print-compact .print-items-col { width: 52% !important; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
   .print-compact .print-narrow-col { width: 16% !important; }
-  .print-compact .badge { padding: 1px 5px !important; font-size: 9px !important; gap: 2px !important; }
+  /* مقصور على عمود البنود تحديدًا (مش .print-compact .badge عمومًا) - عشان
+     يستحيل بنيويًا يأثر على أي بادچ في أي تقرير تاني حتى لو اتضاف مستقبلًا */
+  .print-compact .print-items-col .badge { padding: 1px 5px !important; font-size: 9px !important; gap: 2px !important; }
   .print-compact th {
     font-size: 9px !important;
     padding: 2px 3px !important;
@@ -356,6 +358,7 @@ tr:hover td { background: var(--bg); }
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 13.5px; margin-bottom: 14px; }
 .alert-error { background: var(--danger-soft); color: var(--danger); }
 .alert-ok { background: var(--ok-soft); color: var(--ok); }
+.alert-pending { background: var(--pending-soft); color: var(--pending); }
 
 .login-wrap {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -368,8 +371,18 @@ tr:hover td { background: var(--bg); }
 
 @media (max-width: 780px) {
   .app-shell { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; }
-  .sidebar .brand, .sidebar .user-box { display: none; }
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; align-items: center; position: relative; }
+  .sidebar .brand { display: none; }
+  .sidebar .user-box {
+    margin-top: 0; margin-inline-start: auto; padding: 0; border-top: none;
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap;
+  }
+  .sidebar .user-box > div:first-child { display: none; }
+  .sidebar .user-box button { margin-top: 0; }
+  .sidebar .user-box .change-password-box {
+    position: absolute; top: 100%; inset-inline-end: 10px; z-index: 30;
+    width: 220px; box-shadow: 0 8px 20px rgba(15, 27, 42, 0.25);
+  }
   .main { padding: 14px; }
 }
 
