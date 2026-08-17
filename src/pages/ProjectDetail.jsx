@@ -887,13 +887,26 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
 
   async function bulkVariantChange(variant) {
     const targets = filteredDoors.filter((d) => selected.has(d.id))
-    const doorLeafItems = targets
+    let doorLeafItems = targets
       .map((d) => (d.door_items || []).find((it) => it.item_types?.name === 'ضلفة'))
       .filter(Boolean)
-    if (doorLeafItems.length === 0) { onError('مفيش بند "ضلفة" في أي من الأبواب المحددة.'); return }
+    const totalFound = doorLeafItems.length
+    if (profile.role !== 'admin') {
+      doorLeafItems = doorLeafItems.filter((it) => it.status === 'pending_review')
+    }
+    const skippedApproved = totalFound - doorLeafItems.length
+    if (doorLeafItems.length === 0) {
+      onError(
+        skippedApproved > 0
+          ? 'كل بنود الضلفة في الأبواب المحددة معتمدة بالفعل من المهندس - مدخل البيانات مايقدرش يعدّلها بعد الاعتماد.'
+          : 'مفيش بند "ضلفة" في أي من الأبواب المحددة.'
+      )
+      return
+    }
     const label = variant === 'large' ? 'ضلفة كبيرة' : variant === 'sliding' ? 'ضلفة جرار' : 'ضلفة عادية'
+    const skipNote = skippedApproved > 0 ? ` (${skippedApproved} باب اتجاهل لإن بند الضلفة فيه معتمد بالفعل)` : ''
     const ok = window.confirm(
-      `تعديل ${doorLeafItems.length} بند ضلفة إلى "${label}"${variant === 'sliding' ? '، وده هيمسح باقي بنود كل باب من الأبواب دي (غير الضلفة نفسها)' : ''}. متأكد؟`
+      `تعديل ${doorLeafItems.length} بند ضلفة إلى "${label}"${skipNote}${variant === 'sliding' ? '، وده هيمسح باقي بنود كل باب من الأبواب دي (غير الضلفة نفسها)' : ''}. متأكد؟`
     )
     if (!ok) return
     setBulkBusy(true)
@@ -1124,7 +1137,8 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                   const canDeletePending = ['admin', 'data_entry'].includes(profile.role) && !isDelivered && it.status === 'pending_review'
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
                   const statusCls = it.status === 'approved' ? 'badge-empty' : it.status === 'rejected' ? 'badge-danger' : 'badge-pending'
-                  if (isDoorLeaf && profile.role === 'admin' && !isDelivered) {
+                  const canChangeVariant = profile.role === 'admin' || (profile.role === 'data_entry' && it.status === 'pending_review')
+                  if (isDoorLeaf && canChangeVariant && !isDelivered) {
                     return (
                       <select
                         key={it.id}
@@ -1210,7 +1224,7 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
               <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkToggleType('door')}>
                 تحويل الكل لباب عادي
               </button>
-              {profile.role === 'admin' && (
+              {['admin', 'data_entry'].includes(profile.role) && (
                 <>
                   <button className="btn-secondary sm" disabled={bulkBusy} onClick={() => bulkVariantChange('large')}>
                     الضلفة كبيرة للكل
