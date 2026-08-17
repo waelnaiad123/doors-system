@@ -1055,22 +1055,37 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
           </button>
         </div>
       )}
-      {['admin', 'data_entry'].includes(profile.role) && !isDelivered && (
-        <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>تصحيح غلطة إدخال جماعية:</span>
-          <select value={deleteTypeId} onChange={(e) => setDeleteTypeId(e.target.value)} style={{ maxWidth: 200 }}>
-            <option value="">-- اختار نوع البند --</option>
-            {itemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <button
-            className="btn-danger sm"
-            disabled={bulkBusy || !deleteTypeId}
-            onClick={() => bulkDeletePendingByType(deleteTypeId, itemTypes.find((t) => t.id === deleteTypeId)?.name || '')}
-          >
-            🗑️ امسح كل النسخ المعلّقة من النوع ده في المشروع كامل
-          </button>
-        </div>
-      )}
+      {['admin', 'data_entry'].includes(profile.role) && !isDelivered && (() => {
+        const deletePendingCount = deleteTypeId
+          ? doors.reduce((sum, d) => sum + (d.door_items || []).filter((it) => it.status === 'pending_review' && it.item_type_id === deleteTypeId).length, 0)
+          : 0
+        return (
+          <div className="no-print" style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>تصحيح غلطة إدخال جماعية (لنوع بند اتضاف غلط لعدة أبواب)</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+              بيمسح بس البنود "المعلّقة" من النوع اللي تختاره (اللي لسه ما اعتمدهاش المهندس) — أي بند من نفس النوع اتعتمد أو اترفض قبل كده مش هيتأثر خالص.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <select value={deleteTypeId} onChange={(e) => setDeleteTypeId(e.target.value)} style={{ maxWidth: 200 }}>
+                <option value="">-- اختار نوع البند --</option>
+                {itemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {deleteTypeId && (
+                <span className={deletePendingCount > 0 ? 'badge badge-pending' : 'badge badge-empty'}>
+                  {deletePendingCount > 0 ? `هيتمسح ${deletePendingCount} بند معلّق` : 'مفيش بنود معلّقة من النوع ده'}
+                </span>
+              )}
+              <button
+                className="btn-danger sm"
+                disabled={bulkBusy || !deleteTypeId || deletePendingCount === 0}
+                onClick={() => bulkDeletePendingByType(deleteTypeId, itemTypes.find((t) => t.id === deleteTypeId)?.name || '')}
+              >
+                🗑️ امسح المعلّق من النوع ده
+              </button>
+            </div>
+          </div>
+        )
+      })()}
       <DoorFilter doors={doors} onFilteredChange={setFilteredDoors} />
 
       <table>
