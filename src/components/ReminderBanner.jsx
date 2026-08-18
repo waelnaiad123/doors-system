@@ -122,7 +122,7 @@ export default function ReminderBanner() {
 
   async function load() {
     try {
-      if (['technician', 'supervisor', 'admin'].includes(profile.role) || profile.is_installations_manager) {
+      if (['technician', 'supervisor', 'admin', 'engineer'].includes(profile.role) || profile.is_installations_manager) {
         const { data } = await fetchAllRows((from, to) =>
           supabase.from('v_unentered_workforce').select('*').range(from, to)
         )
