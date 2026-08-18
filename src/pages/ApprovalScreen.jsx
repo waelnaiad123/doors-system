@@ -73,10 +73,11 @@ export default function ApprovalScreen() {
     if (error) { setError(error.message); setLoadingOverview(false); return }
     const eligible = (data || []).filter(canApprove)
     const m = new Map()
-    eligible.forEach((r) => {
-      if (!m.has(r.project_id)) m.set(r.project_id, { project_id: r.project_id, project_number: r.project_number, project_name: r.project_name, count: 0 })
-      m.get(r.project_id).count++
-    })
+    function ensure(id, number, name) {
+      if (!m.has(id)) m.set(id, { project_id: id, project_number: number, project_name: name, installCount: 0, notesCount: 0, deliveryCount: 0 })
+      return m.get(id)
+    }
+    eligible.forEach((r) => { ensure(r.project_id, r.project_number, r.project_name).installCount++ })
 
     if (profile.role === 'supervisor' || profile.role === 'engineer' || profile.role === 'admin') {
       const { data: pendingNotes } = await fetchAllRows((from, to) =>
@@ -87,19 +88,29 @@ export default function ApprovalScreen() {
           .range(from, to)
       )
       ;(pendingNotes || []).forEach((n) => {
-        if (!m.has(n.project_id)) {
-          m.set(n.project_id, {
-            project_id: n.project_id,
-            project_number: n.projects?.project_number,
-            project_name: n.projects?.project_name,
-            count: 0,
-          })
-        }
-        m.get(n.project_id).count++
+        ensure(n.project_id, n.projects?.project_number, n.projects?.project_name).notesCount++
       })
     }
 
-    const list = Array.from(m.values()).sort((a, b) => b.count - a.count)
+    // اعتماد التسليمات مقصور على المهندس/الأدمن فقط (زي ما هي محددة في قاعدة
+    // البيانات) - من غير الاستعلام ده، مشروع فيه بس تسليم معلّق (من غير تركيب
+    // أو ملاحظة معلّقة) كان مستحيل يظهر في القائمة خالص لأي دور، حتى لو كانت
+    // شاشة الاعتماد نفسها جاهزة تعتمده لو المشروع اتفتح بطريقة تانية
+    if (profile.role === 'engineer' || profile.role === 'admin') {
+      const { data: pendingDeliveries } = await fetchAllRows((from, to) =>
+        supabase
+          .from('v_deliveries_detail')
+          .select('project_id, project_number, project_name')
+          .eq('status', 'pending_review')
+          .range(from, to)
+      )
+      ;(pendingDeliveries || []).forEach((d) => {
+        ensure(d.project_id, d.project_number, d.project_name).deliveryCount++
+      })
+    }
+
+    const total = (p) => p.installCount + p.notesCount + p.deliveryCount
+    const list = Array.from(m.values()).sort((a, b) => total(b) - total(a))
     setProjectsPending(list)
     if (projectId && !list.some((p) => p.project_id === projectId)) setProjectId('')
     setLoadingOverview(false)
@@ -286,11 +297,17 @@ export default function ApprovalScreen() {
             </label>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
               <option value="">-- اختر مشروعًا --</option>
-              {projectsPending.map((p) => (
-                <option key={p.project_id} value={p.project_id}>
-                  {p.project_number} — {p.project_name} ({p.count} بند)
-                </option>
-              ))}
+              {projectsPending.map((p) => {
+                const parts = []
+                if (p.installCount > 0) parts.push(`${p.installCount} تركيب`)
+                if (p.notesCount > 0) parts.push(`${p.notesCount} ملاحظة`)
+                if (p.deliveryCount > 0) parts.push(`${p.deliveryCount} تسليم`)
+                return (
+                  <option key={p.project_id} value={p.project_id}>
+                    {p.project_number} — {p.project_name} ({parts.join('، ')})
+                  </option>
+                )
+              })}
             </select>
           </div>
         </div>
