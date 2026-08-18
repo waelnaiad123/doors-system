@@ -121,7 +121,7 @@ export default function ReminderBanner() {
 
   async function load() {
     try {
-      if (['technician', 'supervisor', 'admin'].includes(profile.role)) {
+      if (['technician', 'supervisor', 'admin'].includes(profile.role) || profile.is_installations_manager) {
         const { data } = await fetchAllRows((from, to) =>
           supabase.from('v_unentered_workforce').select('*').range(from, to)
         )
@@ -149,7 +149,7 @@ export default function ReminderBanner() {
         )
         setDeliveriesCount((data || []).length)
       }
-      if (profile.role === 'engineer') {
+      if (profile.role === 'engineer' && !profile.is_installations_manager) {
         await loadEngineerOnboarding()
       }
       if (['supervisor', 'technician'].includes(profile.role)) {
