@@ -235,6 +235,12 @@ export default function TechnicianDaily() {
     return projects.filter((p) => untouchedProjectIds.has(p.id) && !reminderProjects.some((r) => r.id === p.id))
   }, [projects, untouchedProjectIds, reminderProjects])
 
+  // مشاريع دخل فيها الفني تركيب أو ملاحظة النهاردة بالفعل - بتفضل متاحة يرجعلها
+  // لو افتكر إن فيه أبواب تانية محتاجة تسجيل، بدل ما تختفي من القائمة تمامًا
+  const enteredTodayProjects = useMemo(() => {
+    return projects.filter((p) => enteredProjectIds.has(p.id))
+  }, [projects, enteredProjectIds])
+
   function handleDoorFilterChange(filtered) {
     setFilteredDoorCodes(new Set(filtered.map((d) => d.door_code)))
   }
@@ -334,8 +340,15 @@ export default function TechnicianDaily() {
                 <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
               ))}
             </optgroup>
+            {enteredTodayProjects.length > 0 && (
+              <optgroup label="مشاريع دخلت فيها تركيب النهاردة (لإضافة أبواب تانية)">
+                {enteredTodayProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.project_number} — {p.project_name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
-          {reminderProjects.length === 0 && untouchedProjects.length === 0 && !loadingProjects && (
+          {reminderProjects.length === 0 && untouchedProjects.length === 0 && enteredTodayProjects.length === 0 && !loadingProjects && (
             <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>
               مفيش مشروع متاح للتسجيل دلوقتي. لازم يبقى فيه حصر أفراد النهاردة على المشروع الأول، أو يكون مشروع جديد لسه معملتش فيه تركيب خالص.
             </p>
