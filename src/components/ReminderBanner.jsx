@@ -15,6 +15,7 @@ function namesWithOverflow(items, max = 2) {
 export default function ReminderBanner() {
   const { profile } = useAuth()
   const [unentered, setUnentered] = useState([])
+  const [unenteredEngineers, setUnenteredEngineers] = useState(new Map())
   const [approvalsCount, setApprovalsCount] = useState(0)
   const [deliveriesCount, setDeliveriesCount] = useState(0)
   const [notesCount, setNotesCount] = useState(0)
@@ -125,7 +126,34 @@ export default function ReminderBanner() {
         const { data } = await fetchAllRows((from, to) =>
           supabase.from('v_unentered_workforce').select('*').range(from, to)
         )
-        setUnentered(data || [])
+        // نجمع بمشروع واحد بس (مش صف لكل تاريخ) عشان العدد والأسماء يكونوا
+        // دقيقين - مشروع واحد ليه يومين متأخرين كان بيتحسب مرتين قبل كده
+        const byProject = new Map()
+        ;(data || []).forEach((r) => {
+          if (!byProject.has(r.project_id)) byProject.set(r.project_id, r)
+        })
+        const uniqueUnentered = Array.from(byProject.values())
+        setUnentered(uniqueUnentered)
+
+        if (uniqueUnentered.length > 0) {
+          const { data: assigns } = await fetchAllRows((from, to) =>
+            supabase
+              .from('project_assignments')
+              .select('project_id, profiles(full_name)')
+              .in('project_id', uniqueUnentered.map((p) => p.project_id))
+              .eq('role', 'engineer')
+              .eq('is_active', true)
+              .range(from, to)
+          )
+          const engineersByProject = new Map()
+          ;(assigns || []).forEach((a) => {
+            if (!engineersByProject.has(a.project_id)) engineersByProject.set(a.project_id, [])
+            if (a.profiles?.full_name) engineersByProject.get(a.project_id).push(a.profiles.full_name)
+          })
+          setUnenteredEngineers(engineersByProject)
+        } else {
+          setUnenteredEngineers(new Map())
+        }
       }
       if (['supervisor', 'engineer', 'admin'].includes(profile.role)) {
         const { data } = await fetchAllRows((from, to) =>
@@ -172,6 +200,13 @@ export default function ReminderBanner() {
   const engineerOnboardingNames = showEngineerOnboarding ? namesWithOverflow(engineerOnboarding) : ''
   const stalledNames = showStalled ? namesWithOverflow(stalledProjects) : ''
   const teamOnboardingNames = showTeamOnboarding ? namesWithOverflow(teamOnboarding) : ''
+  const unenteredWithEngineer = showEntry
+    ? unentered.map((p) => {
+        const engineers = unenteredEngineers.get(p.project_id) || []
+        return { project_name: engineers.length > 0 ? `${p.project_name} (${engineers.join('/')})` : p.project_name }
+      })
+    : []
+  const unenteredNames = showEntry ? namesWithOverflow(unenteredWithEngineer) : ''
 
   return (
     <div className="reminder-banner">
@@ -192,7 +227,7 @@ export default function ReminderBanner() {
       )}
       {showEntry && (
         <Link to="/technician" className="reminder-line">
-          ⚠️ {unentered.length} مشروع فيه عمال ولسه محتاج تسجيل تركيب أو ملاحظة اليوم
+          ⚠️ {unentered.length} مشروع فيه عمال ولسه محتاج تسجيل تركيب أو ملاحظة اليوم ({unenteredNames})
         </Link>
       )}
       {showApprovals && (
