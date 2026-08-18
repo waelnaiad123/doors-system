@@ -160,7 +160,7 @@ export default function App() {
               />
               <Route
                 path="delivery"
-                element={<RequireRole roles={['admin', 'delivery_entry']}><DeliveryScreen /></RequireRole>}
+                element={<RequireRole roles={['admin', 'delivery_entry', 'data_entry']}><DeliveryScreen /></RequireRole>}
               />
               <Route
                 path="reports"
