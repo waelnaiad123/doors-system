@@ -26,6 +26,7 @@ const NAV_BY_ROLE = {
     { to: '/dashboard', label: 'الرئيسية' },
     { to: '/projects', label: 'المشاريع' },
     { to: '/assignments', label: 'تخصيص المهندس' },
+    { to: '/delivery', label: 'التسليمات' },
     { to: '/project-status', label: 'موقف مشروع' },
   ],
   technician: [
