@@ -923,19 +923,122 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
     }
   }
 
-  async function bulkDeletePendingByType(itemTypeId, itemTypeName) {
-    const pendingIds = []
-    doors.forEach((d) => (d.door_items || []).forEach((it) => {
-      if (it.status === 'pending_review' && it.item_type_id === itemTypeId) pendingIds.push(it.id)
-    }))
-    if (pendingIds.length === 0) { onError(`مفيش أي بند معلّق من نوع "${itemTypeName}" في المشروع ده.`); return }
-    const ok = window.confirm(`هيتمسح ${pendingIds.length} بند معلّق من نوع "${itemTypeName}" في المشروع كامل. البنود المعتمدة من النوع ده مش هتتأثر. الإجراء ده مايتراجعش فيه. متأكد؟`)
+  async function bulkDeleteDoors() {
+    if (profile.role !== 'admin') return
+    const targets = filteredDoors.filter((d) => selected.has(d.id))
+    if (targets.length === 0) return
+
+    // فحص أمان: أي باب فيه أي بند له تركيب مسجّل فعليًا (بغض النظر عن حالة
+    // البند أو التركيب) بيتستبعد تمامًا من الحذف - الأداة دي لتصحيح غلطة
+    // إدخال (باب اتضاف غلط بالكامل) قبل أي شغل حقيقي، مش لحذف شغل حصل فعلًا
+    const allItemIds = []
+    targets.forEach((d) => (d.door_items || []).forEach((it) => allItemIds.push(it.id)))
+    let installedItemIds = new Set()
+    if (allItemIds.length > 0) {
+      const { data: installed, error: instErr } = await supabase
+        .from('installation_records')
+        .select('door_item_id')
+        .in('door_item_id', allItemIds)
+      if (instErr) { onError(instErr.message); return }
+      installedItemIds = new Set((installed || []).map((r) => r.door_item_id))
+    }
+    const doorHasInstall = (d) => (d.door_items || []).some((it) => installedItemIds.has(it.id))
+    const safeToDelete = targets.filter((d) => !doorHasInstall(d))
+    const skipped = targets.filter(doorHasInstall)
+
+    if (safeToDelete.length === 0) {
+      onError(`كل الأبواب المحددة (${skipped.map((d) => d.door_code).join('، ')}) ليها تركيب مسجّل بالفعل على بند واحد منها على الأقل - محدش منهم قابل للحذف. الأداة دي لتصحيح باب اتضاف غلط قبل أي شغل حقيقي عليه.`)
+      return
+    }
+
+    // نعرض أكواد الأبواب بالاسم، مش رقم بس - عشان يتأكد بعينه قبل الحذف
+    const listCodes = (doors, max = 15) => {
+      const codes = doors.map((d) => d.door_code)
+      if (codes.length <= max) return codes.join('، ')
+      return `${codes.slice(0, max).join('، ')}، +${codes.length - max} باب تاني`
+    }
+    let message = `هيتمسح ${safeToDelete.length} باب نهائيًا مع كل بنوده وأي بيانات مرتبطة بيهم:\n\n${listCodes(safeToDelete)}\n\nالإجراء ده مايتراجعش فيه، ومفيش أي نسخة احتياطية له.`
+    if (skipped.length > 0) {
+      message += `\n\n⚠️ اتستبعد ${skipped.length} باب من الحذف لإن فيه تركيب مسجّل فعليًا: ${listCodes(skipped)}`
+    }
+    const ok = window.confirm(message)
     if (!ok) return
+
+    // تأكيد أخير بكتابة العدد بالظبط - حماية إضافية ضد ضغط "موافق" بدون قراءة
+    const typed = window.prompt(`اكتب رقم "${safeToDelete.length}" بالظبط عشان تأكد الحذف النهائي:`)
+    if (typed === null) return
+    if (typed.trim() !== String(safeToDelete.length)) {
+      onError('الرقم اللي كتبته مش مطابق - اتلغى الحذف. جرب تاني لو متأكد.')
+      return
+    }
+
     setBulkBusy(true)
     try {
+      const ids = safeToDelete.map((d) => d.id)
       const CHUNK = 150
-      for (let i = 0; i < pendingIds.length; i += CHUNK) {
-        const batch = pendingIds.slice(i, i + CHUNK)
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const batch = ids.slice(i, i + CHUNK)
+        const { error } = await supabase.from('doors').delete().in('id', batch)
+        if (error) throw error
+      }
+      onReload()
+      setSelected(new Set())
+    } catch (e) {
+      onError(e.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function bulkDeletePendingByType(itemTypeId, itemTypeName) {
+    const isAdmin = profile.role === 'admin'
+    const candidates = []
+    doors.forEach((d) => (d.door_items || []).forEach((it) => {
+      if (it.item_type_id !== itemTypeId) return
+      if (it.status === 'pending_review') candidates.push(it)
+      else if (isAdmin && it.status === 'approved') candidates.push(it)
+    }))
+    if (candidates.length === 0) {
+      onError(`مفيش أي بند ${isAdmin ? 'معلّق أو معتمد' : 'معلّق'} من نوع "${itemTypeName}" في المشروع ده.`)
+      return
+    }
+
+    // فحص أمان: أي بند معتمد ليه تركيب مسجّل فعليًا (بغض النظر عن حالته)
+    // بيتستبعد من الحذف الجماعي - حذف البند كان هيمسح سجل التركيب معاه
+    // تلقائيًا (حذف متسلسل)، وده تدمير بيانات حقيقية مش تصحيح غلطة إدخال
+    const approvedIds = candidates.filter((it) => it.status === 'approved').map((it) => it.id)
+    let installedIds = new Set()
+    if (approvedIds.length > 0) {
+      const { data: installed, error: instErr } = await supabase
+        .from('installation_records')
+        .select('door_item_id')
+        .in('door_item_id', approvedIds)
+      if (instErr) { onError(instErr.message); return }
+      installedIds = new Set((installed || []).map((r) => r.door_item_id))
+    }
+    const safeToDelete = candidates.filter((it) => !installedIds.has(it.id))
+    const skippedInstalled = candidates.length - safeToDelete.length
+
+    if (safeToDelete.length === 0) {
+      onError(`كل البنود من نوع "${itemTypeName}" ليها تركيب مسجّل بالفعل - محدش منهم قابل للحذف الجماعي. لازم تتعامل معاهم فرديًا.`)
+      return
+    }
+
+    const pendingCount = safeToDelete.filter((it) => it.status === 'pending_review').length
+    const approvedCount = safeToDelete.filter((it) => it.status === 'approved').length
+    const parts = []
+    if (pendingCount > 0) parts.push(`${pendingCount} معلّق`)
+    if (approvedCount > 0) parts.push(`${approvedCount} معتمد`)
+    const skipNote = skippedInstalled > 0 ? ` (${skippedInstalled} بند اتستبعد لإن ليه تركيب مسجّل فعليًا - لازم تتصرف فيه فرديًا)` : ''
+    const ok = window.confirm(`هيتمسح ${safeToDelete.length} بند من نوع "${itemTypeName}" (${parts.join('، ')}) في المشروع كامل${skipNote}. الإجراء ده مايتراجعش فيه. متأكد؟`)
+    if (!ok) return
+
+    setBulkBusy(true)
+    try {
+      const ids = safeToDelete.map((it) => it.id)
+      const CHUNK = 150
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const batch = ids.slice(i, i + CHUNK)
         const { error } = await supabase.from('door_items').delete().in('id', batch)
         if (error) throw error
       }
@@ -982,6 +1085,16 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
   }
 
   async function handleDeleteItem(itemId, itemLabel) {
+    const { data: installed, error: instErr } = await supabase
+      .from('installation_records')
+      .select('id')
+      .eq('door_item_id', itemId)
+      .limit(1)
+    if (instErr) { onError(instErr.message); return }
+    if (installed && installed.length > 0) {
+      onError(`"${itemLabel}" ليه تركيب مسجّل فعليًا - مش قابل للحذف من هنا. لو محتاج تلغي التركيب نفسه، ده إجراء مختلف تمامًا.`)
+      return
+    }
     const ok = window.confirm(`متأكد إنك عايز تمسح "${itemLabel}"؟ الإجراء ده مايتراجعش فيه.`)
     if (!ok) return
     const { error } = await supabase.from('door_items').delete().eq('id', itemId)
@@ -1140,7 +1253,7 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                   const isVentCount = it.item_types?.name === 'عدد الهوايات'
                   const canEdit = ['admin', 'data_entry', 'engineer'].includes(profile.role) && !isDelivered
                   const canApproveItem = ['admin', 'engineer'].includes(profile.role) && !isDelivered
-                  const canDeletePending = ['admin', 'data_entry'].includes(profile.role) && !isDelivered && it.status === 'pending_review'
+                  const canDeletePending = !isDelivered && (profile.role === 'admin' || (profile.role === 'data_entry' && it.status === 'pending_review'))
                   const variantLabel = it.variant === 'large' ? ' (كبيرة)' : it.variant === 'sliding' ? ' (جرار)' : ''
                   const statusCls = it.status === 'approved' ? 'badge-empty' : it.status === 'rejected' ? 'badge-danger' : 'badge-pending'
                   const canChangeVariant = profile.role === 'admin' || (profile.role === 'data_entry' && it.status === 'pending_review')
@@ -1216,6 +1329,12 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
         </div>
       )}
 
+      {profile.role === 'admin' && selected.size > 0 && !isDelivered && (
+        <div className="alert" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: 12.5 }}>
+          ⚠️ زرار "حذف المحدد نهائيًا" تحت بيمسح باب اتضاف غلط بالكامل قبل أي شغل عليه. أي باب فيه بند له تركيب مسجّل فعليًا (حتى لو بند واحد بس) بيتستبعد تلقائيًا ومش بيتمسح. الحذف نهائي، مفيش نسخة احتياطية ولا تراجع.
+        </div>
+      )}
+
       {canBulkEdit && selected.size > 0 && (
         <div className="sticky-action-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>تم اختيار {selected.size} باب</span>
@@ -1239,6 +1358,11 @@ function DoorsList({ doors, itemTypes, variantPoints, isDelivered, onReload, onE
                     الضلفة جرار للمحدد
                   </button>
                 </>
+              )}
+              {profile.role === 'admin' && (
+                <button className="btn-danger sm" disabled={bulkBusy} onClick={bulkDeleteDoors} title="بيمسح بس الأبواب اللي معندهاش تركيب مسجّل فعليًا">
+                  🗑️ حذف {selected.size} باب نهائيًا (غلطة إدخال)
+                </button>
               )}
             </>
           )}
