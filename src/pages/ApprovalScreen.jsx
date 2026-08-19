@@ -166,6 +166,30 @@ export default function ApprovalScreen() {
     await loadDeliveries()
   }
 
+  async function approveAllDeliveries() {
+    if (deliveries.length === 0) return
+    setBusy(true)
+    setError('')
+    try {
+      const ids = deliveries.map((d) => d.delivery_id)
+      const { data, error } = await supabase
+        .from('deliveries')
+        .update({ status: 'approved', approved_by: profile.id, approved_at: new Date().toISOString() })
+        .in('id', ids)
+        .select()
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('لم يتم تحديث أي تسليم — غالبًا إنت مش مخصص كمهندس على هذا المشروع.')
+      }
+      setNotice(`تم اعتماد ${data.length} تسليم بنجاح.`)
+      await Promise.all([loadDeliveries(), loadOverview()])
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const pending = useMemo(() => records.filter((r) => r.status === 'pending_review' || r.status === 'supervisor_approved'), [records])
   const eligiblePending = useMemo(() => pending.filter(canApprove), [pending]) // eslint-disable-line
   const groupedByDoor = useMemo(() => {
@@ -463,7 +487,12 @@ export default function ApprovalScreen() {
 
       {projectId && deliveries.length > 0 && (
         <div className="card">
-          <h2 style={{ marginBottom: 10 }}>تسليمات بانتظار الاعتماد ({deliveries.length})</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            <h2 style={{ marginBottom: 0 }}>تسليمات بانتظار الاعتماد ({deliveries.length})</h2>
+            <button className="btn-primary" disabled={busy} onClick={approveAllDeliveries}>
+              اعتماد كل التسليمات الظاهرة ({deliveries.length})
+            </button>
+          </div>
           {deliveries.map((d) => (
             <div key={d.delivery_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg)', marginBottom: 6, flexWrap: 'wrap' }}>
               <span className="code-cell">{d.door_code}</span>
