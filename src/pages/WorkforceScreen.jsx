@@ -59,6 +59,10 @@ export default function WorkforceScreen() {
 
   async function handleSave(projectId, headcountValue, plannedPointsValue, notesValue) {
     if (isLocked) return
+    if (date > cairoTodayStr()) {
+      setError('مايمكنش تسجّل حصر أفراد بتاريخ لسه ما جاش. اختر تاريخ النهاردة أو تاريخ سابق.')
+      return
+    }
     setSavingId(projectId)
     setError(''); setNotice('')
     const headcount = Number(headcountValue)
