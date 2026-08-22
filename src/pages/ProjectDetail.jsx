@@ -146,6 +146,7 @@ export default function ProjectDetail() {
           itemTypes={itemTypes}
           doors={doors}
           existingSerials={existingSerials}
+          profile={profile}
           onSaved={(msg) => { setNotice(msg); setError(''); loadAll() }}
           onError={(e) => { setError(e); setNotice('') }}
         />
@@ -154,6 +155,7 @@ export default function ProjectDetail() {
         <ImportFile
           projectId={projectId}
           itemTypes={itemTypes}
+          profile={profile}
           onSaved={(msg) => { setNotice(msg); setError(''); loadAll() }}
           onError={(e) => { setError(e); setNotice('') }}
         />
@@ -168,7 +170,7 @@ export default function ProjectDetail() {
 const VENT_ONLY_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 const VENT_ALLOWED_ITEMS = ['حلق هواية/شباك', 'عدد الهوايات']
 
-function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onError }) {
+function ManualAdd({ projectId, itemTypes, doors, existingSerials, profile, onSaved, onError }) {
   const [orderNumber, setOrderNumber] = useState('')
   const [serial, setSerial] = useState('')
   const [building, setBuilding] = useState('')
@@ -226,12 +228,42 @@ function ManualAdd({ projectId, itemTypes, doors, existingSerials, onSaved, onEr
     const itemsPayload = validRows.map((r) => ({
       door_id: door.id, item_type_id: r.item_type_id, quantity: Number(r.quantity) || 1,
     }))
-    const { error: itemsErr } = await supabase.from('door_items').upsert(itemsPayload, { onConflict: 'door_id,item_type_id' })
+
+    // نفس حماية الاستيراد الجماعي بالظبط - مدخل البيانات مايقدرش يعدّل بند
+    // معتمد بالفعل، فبنستبعده قبل الإرسال بدل ما نسيب القاعدة ترفض العملية
+    // كاملة برسالة خطأ خام. الأدمن مش متأثر بالفلترة دي.
+    let payloadToSave = itemsPayload
+    let skippedApprovedCount = 0
+    if (profile.role !== 'admin' && itemsPayload.length > 0) {
+      const { data: existingItems, error: existErr } = await supabase
+        .from('door_items')
+        .select('item_type_id, status')
+        .eq('door_id', door.id)
+      if (existErr) { onError(existErr.message); setSaving(false); return }
+      const statusByType = new Map((existingItems || []).map((it) => [it.item_type_id, it.status]))
+      payloadToSave = itemsPayload.filter((r) => {
+        const status = statusByType.get(r.item_type_id)
+        const isBlocked = status && status !== 'pending_review'
+        if (isBlocked) skippedApprovedCount++
+        return !isBlocked
+      })
+    }
+
+    if (payloadToSave.length === 0) {
+      onError('كل البنود اللي اخترتها معتمدة بالفعل على الباب ده - محتاجة تصحيح فردي من الأدمن.')
+      setSaving(false)
+      return
+    }
+
+    const { error: itemsErr } = await supabase.from('door_items').upsert(payloadToSave, { onConflict: 'door_id,item_type_id' })
 
     setSaving(false)
     if (itemsErr) { onError(itemsErr.message); return }
 
-    onSaved(`تم حفظ الباب "${door.door_code}" بعدد ${validRows.length} بند.`)
+    const skipNote = skippedApprovedCount > 0
+      ? ` تم تجاهل ${skippedApprovedCount} بند لإنها معتمدة بالفعل - محتاجة تصحيح فردي من الأدمن.`
+      : ''
+    onSaved(`تم حفظ الباب "${door.door_code}" بعدد ${payloadToSave.length} بند.${skipNote}`)
     setOrderNumber(''); setSerial(''); setBuilding(''); setFloor(''); setDoorNumber(''); setDoorType('door')
     setRows([{ item_type_id: '', quantity: 1 }])
   }
@@ -341,7 +373,7 @@ function FieldMapper({ label, mode, col, fixed, headers, onModeChange, onColChan
   )
 }
 
-function ImportFile({ projectId, itemTypes, onSaved, onError }) {
+function ImportFile({ projectId, itemTypes, profile, onSaved, onError }) {
   const [rawSheet, setRawSheet] = useState(null)
   const [headerRowNum, setHeaderRowNum] = useState(1)
   const [mapping, setMapping] = useState(null)
@@ -576,9 +608,39 @@ function ImportFile({ projectId, itemTypes, onSaved, onError }) {
           if (it.item_type_id && doorId) itemRows.push({ door_id: doorId, item_type_id: it.item_type_id, quantity: it.quantity })
         })
       })
-      await upsertInChunks('door_items', itemRows, 'door_id,item_type_id')
 
-      onSaved(`تم استيراد ${preview.doorCount} باب بإجمالي ${itemRows.length} بند بنجاح.`)
+      // مدخل البيانات مايقدرش يعدّل بند معتمد بالفعل (نفس قيد قاعدة البيانات) -
+      // لو سبنا الاستيراد يحاول عليه عادي، الدفعة كاملة (لغاية 500 بند) كانت
+      // هترفض بسبب بند واحد بس معتمد وسطها. هنا بنستبعد البنود دي قبل الإرسال
+      // أصلًا، عشان باقي البنود الصح تتحفظ عادي، ونوضح للمستخدم بالظبط كام
+      // بند اتستبعد وليه، بدل رسالة خطأ خام من القاعدة. الأدمن مش متأثر بالفلترة
+      // دي خالص، لإنه مش مقيّد بنفس القيد في قاعدة البيانات من الأساس.
+      let itemRowsToUpsert = itemRows
+      let skippedApprovedCount = 0
+      if (profile.role !== 'admin' && itemRows.length > 0) {
+        const doorIds = Array.from(idBySerial.values())
+        const { data: existingItems, error: existErr } = await supabase
+          .from('door_items')
+          .select('door_id, item_type_id, status')
+          .in('door_id', doorIds)
+        if (existErr) throw existErr
+        const statusByKey = new Map(
+          (existingItems || []).map((it) => [`${it.door_id}:${it.item_type_id}`, it.status])
+        )
+        itemRowsToUpsert = itemRows.filter((r) => {
+          const status = statusByKey.get(`${r.door_id}:${r.item_type_id}`)
+          const isBlocked = status && status !== 'pending_review'
+          if (isBlocked) skippedApprovedCount++
+          return !isBlocked
+        })
+      }
+
+      await upsertInChunks('door_items', itemRowsToUpsert, 'door_id,item_type_id')
+
+      const skipNote = skippedApprovedCount > 0
+        ? ` تم تجاهل ${skippedApprovedCount} بند لإنها معتمدة بالفعل - لازم الأدمن يتعامل معاها فرديًا لو محتاجة تصحيح.`
+        : ''
+      onSaved(`تم استيراد ${preview.doorCount} باب بإجمالي ${itemRowsToUpsert.length} بند بنجاح.${skipNote}`)
       setRawSheet(null)
       setMapping(null)
       setPreview(null)
