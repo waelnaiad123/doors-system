@@ -13,7 +13,7 @@ export default function MonthlyProductivity() {
   const [todayY, todayM, todayD] = cairoTodayStr().split('-').map(Number)
   const canManageOthers = profile.role === 'admin' || profile.is_installations_manager
   const [engineersList, setEngineersList] = useState([])
-  const [selectedEngineerId, setSelectedEngineerId] = useState(profile.role === 'engineer' ? profile.id : '')
+  const [selectedEngineerId, setSelectedEngineerId] = useState(profile.role === 'engineer' && !profile.is_installations_manager ? profile.id : '')
   const [year, setYear] = useState(todayY)
   const [month, setMonth] = useState(todayM)
 
@@ -362,7 +362,10 @@ export default function MonthlyProductivity() {
 
       {loading && <p className="no-print" style={{ color: 'var(--muted)' }}>جارِ التحميل...</p>}
 
-      {!loading && projects.length === 0 && (
+      {!loading && projects.length === 0 && canManageOthers && !selectedEngineerId && (
+        <div className="card empty-state no-print"><div className="icon">👤</div>اختار مهندسًا من القائمة فوق الأول عشان تشوف تقريره.</div>
+      )}
+      {!loading && projects.length === 0 && (!canManageOthers || selectedEngineerId) && (
         <div className="card empty-state no-print"><div className="icon">📋</div>لا توجد مشاريع مخصصة لك كمهندس.</div>
       )}
 
@@ -380,13 +383,13 @@ export default function MonthlyProductivity() {
                   <tr>
                     <th className="print-proj-col">المشروع</th>
                     <th>حصر الأفراد</th>
-                    {REPORT_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
                     <th>إجمالي نقاط المشروع</th>
                     <th>نقاط مركبة حتى 20</th>
                     <th>تنفيذ نقاط سابق</th>
                     <th>تنفيذ نقاط حالي</th>
                     <th>تنفيذ نقاط خلال الشهر</th>
                     <th>نقاط أعمال إضافية</th>
+                    {REPORT_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -407,14 +410,13 @@ export default function MonthlyProductivity() {
                         <tr className="print-bold-row" style={{ fontWeight: 700 }}>
                           <td className="print-proj-col">{p.project_number} — {p.project_name}</td>
                           <td title="إجمالي حصر الأفراد من بداية المشروع حتى يوم 20 من هذا الشهر">{workforce.allTime || ''}</td>
-                          {REPORT_COLUMNS.map((c) => <td key={c.key}>{totals.columns[c.key] || ''}</td>)}
                           <td>{Math.round(projectPointsTotal)}</td>
                           <td colSpan={5}></td>
+                          {REPORT_COLUMNS.map((c) => <td key={c.key}>{totals.columns[c.key] || ''}</td>)}
                         </tr>
                         <tr>
                           <td className="print-proj-col" style={{ fontSize: 11, color: 'var(--muted)' }}>منفّذ حتى 20 — مشرف: {p.supervisor_name}</td>
                           <td title="حصر الأفراد خلال الشهر بس (من يوم 21 الشهر السابق لغاية يوم 20 الحالي)">{workforce.thisMonth || ''}</td>
-                          {REPORT_COLUMNS.map((c) => <td key={c.key}>{installed.columns[c.key] || ''}</td>)}
                           <td></td>
                           <td>{Math.round(installedPointsDisplayed)}</td>
                           <td>{Math.round(prevPoints)}</td>
@@ -432,6 +434,7 @@ export default function MonthlyProductivity() {
                             )}
                           </td>
                           <td>{Math.round(addWork)}</td>
+                          {REPORT_COLUMNS.map((c) => <td key={c.key}>{installed.columns[c.key] || ''}</td>)}
                         </tr>
                       </React.Fragment>
                     )
