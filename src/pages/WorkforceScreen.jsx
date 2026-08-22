@@ -90,7 +90,7 @@ export default function WorkforceScreen() {
       <div className="card">
         <div className="field">
           <label>التاريخ</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input type="date" value={date} max={cairoTodayStr()} onChange={(e) => setDate(e.target.value)} />
         </div>
       </div>
 
